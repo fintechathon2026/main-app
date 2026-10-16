@@ -90,7 +90,7 @@ export async function ingestUpload(input: { userId: string; bytes: Uint8Array },
 }
 
 /** Loader for the Reader (`ReaderDeps.loadDocument`): user-scoped row, then the stored bytes. */
-export function createDocumentLoader(deps: { repo: DocumentRepo; storage: DocumentStorage }) {
+export function createDocumentLoader(deps: { repo: DocumentRepo; storage: Pick<DocumentStorage, "get"> }) {
   return async (documentId: string, userId: string): Promise<{ bytes: Uint8Array; mimeType: string }> => {
     const row: DocumentRow | null = await deps.repo.get(documentId, userId);
     if (!row) throw new Error("document not found");

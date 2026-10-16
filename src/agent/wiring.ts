@@ -3,14 +3,14 @@
 //
 //   store        -> PgPlanStore           (minimal R2 version, src/server/plan-store.ts)
 //   executor     -> getExecutor()         (minimal R2 version, src/server/executor)
-//   reader       -> createDocumentReader  over ingest storage (local dir in dev)
+//   reader       -> createDocumentReader  over server-side storage, chosen per storage_ref
 //   signalReader -> createSignalReader    over the registry simulator (SIM_BASE_URL)
 //   readTools    -> read side (src/agent/tools/read)
 
 import { PgPlanStore } from "@/src/server/plan-store";
 import { getExecutor } from "@/src/server/executor";
 import { createPgDocumentRepo } from "@/src/server/ingest/repo";
-import { getDocumentStorage } from "@/src/server/ingest/storage";
+import { createServerDocumentStorage } from "@/src/server/ingest/storage";
 import { createDocumentLoader } from "@/src/server/ingest/upload";
 import { createDocumentReader } from "./nodes/reader";
 import { createHttpSignalFetcher, createSignalReader } from "./nodes/signal_reader";
@@ -41,8 +41,9 @@ export function getAgentDeps(): AgentDeps {
       executor: getExecutor(),
       reader: createDocumentReader({
         models,
-        // Server-side job: no user token, so documents come from the server storage backend.
-        loadDocument: createDocumentLoader({ repo: createPgDocumentRepo(), storage: getDocumentStorage() }),
+        // Server-side job: no user token. The backend is picked per load from the storage_ref
+        // prefix, so constructing deps never fails on storage configuration.
+        loadDocument: createDocumentLoader({ repo: createPgDocumentRepo(), storage: createServerDocumentStorage() }),
       }),
       signalReader: createSignalReader({
         models,

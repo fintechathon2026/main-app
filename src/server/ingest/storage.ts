@@ -86,8 +86,8 @@ export function createSupabaseDocumentStorage(opts: {
 }
 
 /**
- * Pick storage from the environment. Supabase when URL, anon key and a user access token are
- * available; local disk otherwise, but never in production.
+ * Pick storage for an upload from the environment. Supabase when URL, anon key and a user access
+ * token are available; local disk otherwise, but never in production.
  */
 export function getDocumentStorage(accessToken?: string): DocumentStorage {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -102,4 +102,69 @@ export function getDocumentStorage(accessToken?: string): DocumentStorage {
   }
   if (process.env.NODE_ENV === "production") throw new Error("document storage is not configured");
   return createLocalDocumentStorage();
+}
+
+/** A stored document cannot be read by a server-side job. Fails that document only. */
+export class DocumentStorageUnavailable extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DocumentStorageUnavailable";
+  }
+}
+
+/** JWT payload `role` claim, or null when the token is not a decodable JWT. */
+function jwtRole(token: string): string | null {
+  const part = token.split(".")[1];
+  if (!part) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(part, "base64url").toString("utf8")) as { role?: unknown };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+export type ServerStorageEnv = Partial<
+  Record<"NODE_ENV" | "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_ANON_KEY" | "REINS_STORAGE_READ_TOKEN", string>
+>;
+
+/**
+ * Read-only storage for server-side jobs (the Reader), which run without a user token. The
+ * backend is chosen per load from the storage_ref prefix, so a document is always read from
+ * where it was written:
+ *   local:    the dev directory (refused in production)
+ *   supabase: Supabase Storage with REINS_STORAGE_READ_TOKEN, a JWT for a read-only storage
+ *             role. Never service_role: such a token is refused.
+ * Nothing is resolved at construction time; a missing backend fails only the document that
+ * needs it, with DocumentStorageUnavailable.
+ */
+export function createServerDocumentStorage(
+  opts: { env?: ServerStorageEnv; localDir?: string; fetchImpl?: typeof fetch } = {},
+): Pick<DocumentStorage, "get"> {
+  const env = (opts.env ?? process.env) as ServerStorageEnv;
+  return {
+    async get(ref) {
+      if (ref.startsWith("local:")) {
+        if (env.NODE_ENV === "production") throw new DocumentStorageUnavailable("local document storage is not available in production");
+        return createLocalDocumentStorage(opts.localDir).get(ref);
+      }
+      const m = /^supabase:([^/]+)\//.exec(ref);
+      if (m) {
+        const url = env.NEXT_PUBLIC_SUPABASE_URL;
+        const anonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+        const token = env.REINS_STORAGE_READ_TOKEN;
+        if (!url || !anonKey || !token) {
+          throw new DocumentStorageUnavailable(
+            "server-side Supabase storage reads are not configured (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, REINS_STORAGE_READ_TOKEN)",
+          );
+        }
+        const role = jwtRole(token);
+        if (!role || role === "service_role") {
+          throw new DocumentStorageUnavailable("REINS_STORAGE_READ_TOKEN must be a JWT for a read-only storage role, never service_role");
+        }
+        return createSupabaseDocumentStorage({ url, anonKey, accessToken: token, bucket: m[1], fetchImpl: opts.fetchImpl }).get(ref);
+      }
+      throw new DocumentStorageUnavailable("unknown document storage ref");
+    },
+  };
 }
