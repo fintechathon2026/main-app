@@ -46,7 +46,11 @@ export class RecordedModelClient implements ModelClient {
       recordings = opts.recordings;
       this.source = opts.source ?? "inline recordings";
     } else {
-      const dir = path.join(opts.root ?? RECORDINGS_ROOT, opts.scenario);
+      // The default path is statically scoped so the build traces (and ships) evals/recordings
+      // for demo mode; a custom root is for tests and scripts and is not traced.
+      const dir = opts.root
+        ? path.join(/*turbopackIgnore: true*/ opts.root, opts.scenario)
+        : path.join(process.cwd(), "evals", "recordings", opts.scenario);
       recordings = loadRecordings(dir);
       this.source = dir;
     }
