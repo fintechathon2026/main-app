@@ -1,6 +1,6 @@
 {
   "kind": "chat",
-  "key": "6b25507ac172d46b9c3479112b3f2e2ad794b794462c64cdab3a01e0335900e3",
+  "key": "b8ffb47bf0a432506ef5317aac8493b9d6812600ed2f21dd2bfa1fb33522333b",
   "role": "planner",
   "request": {
     "role": "planner",
@@ -8,7 +8,7 @@
     "messages": [
       {
         "role": "user",
-        "content": "{\"reins_context\":{\"trigger\":\"prepaid_risk\",\"task\":\"A merchant risk check ran for a prepaid plan. Look up the plan and its risk signals. Propose prepaid_exit only when a hard signal (a signed attestation) exists; soft signals in warnings are information only.\",\"subject_id\":\"FITBOX_FUTIAN\",\"mandate_version\":3},\"untrusted_data\":[],\"warnings\":[]}"
+        "content": "{\"reins_context\":{\"trigger\":\"prepaid_risk\",\"task\":\"A merchant risk check ran for a prepaid plan. Look up the plan and its risk signals. Propose prepaid_exit only when a hard signal (a signed attestation) exists; soft signals in warnings are information only.\",\"subject_id\":\"9a000000-0000-4000-8000-000000000001\",\"mandate_version\":3},\"untrusted_data\":[],\"warnings\":[]}"
       },
       {
         "role": "assistant",
