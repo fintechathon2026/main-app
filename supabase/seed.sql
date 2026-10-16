@@ -3,7 +3,13 @@
 -- All dates are relative to the reset date so the demo is always "current".
 -- No real personal data: names, accounts and addresses below are fictional.
 -- Stable ids: Lin = 11111111-1111-4111-8111-111111111111; bills and transactions use
--- md5-derived uuids so public.* and mockbank.* rows share ids.
+-- md5-derived uuids (pg_temp.sid) so public.* and mockbank.* rows share ids.
+
+-- Deterministic, RFC 4122-shaped (version 4, variant 8) uuid from a label.
+create function pg_temp.sid(label text) returns uuid language sql immutable as $$
+  select (substr(h, 1, 12) || '4' || substr(h, 14, 3) || '8' || substr(h, 18, 15))::uuid
+  from (select md5(label) as h) x
+$$;
 
 -- ---------------------------------------------------------------------------------------
 -- Local login for the server roles (LOCAL ONLY; production passwords are set out of band).
@@ -90,12 +96,12 @@ with hist(biller_id, m, amount) as (
     ('CHINA_MOBILE', 2, 98), ('CHINA_MOBILE', 1, 98), ('CHINA_MOBILE', 0, 98)
 )
 insert into public.bills (id, user_id, biller_id, amount, currency, amount_origin, due_date, period, status, source_id, created_at)
-select md5('bill:' || biller_id || ':' || m)::uuid, '11111111-1111-4111-8111-111111111111', biller_id, amount, 'CNY', 'mock_bank',
+select pg_temp.sid('bill:' || biller_id || ':' || m), '11111111-1111-4111-8111-111111111111', biller_id, amount, 'CNY', 'mock_bank',
   case when m = 0 then current_date + case biller_id when 'SZ_POWER' then 3 when 'CHINA_MOBILE' then 4 else 6 end
        else (current_date - make_interval(months => m))::date end,
   to_char(current_date - make_interval(months => m + 1), 'YYYY-MM'),
   case when m = 0 then 'unpaid' else 'paid' end,
-  'mb:' || md5('bill:' || biller_id || ':' || m)::uuid,
+  'mb:' || pg_temp.sid('bill:' || biller_id || ':' || m),
   now() - make_interval(months => m, days => 10)
 from hist;
 
@@ -126,13 +132,13 @@ insert into public.usage_signals (user_id, merchant_id, subscription_id, source,
 -- ---------------------------------------------------------------------------------------
 -- Transactions (6 months): salary, paid bills, subscription charges, everyday spending.
 insert into public.transactions (id, user_id, account_id, posted_at, amount, currency, raw_descriptor, merchant_id, category, source_id, origin)
-select md5('tx:salary:' || m)::uuid, '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000001',
+select pg_temp.sid('tx:salary:' || m), '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000001',
   date_trunc('month', now() - make_interval(months => m)) + interval '9 days 10 hours', 18000.00, 'CNY',
   'SALARY SHENZHEN TECH CO', null, 'income', 'tx:salary:' || m, 'mock_bank'
 from generate_series(0, 5) m;
 
 insert into public.transactions (id, user_id, account_id, posted_at, amount, currency, raw_descriptor, merchant_id, category, source_id, origin)
-select md5('tx:' || b.id)::uuid, b.user_id, 'a0000000-0000-4000-8000-000000000001', b.due_date::timestamptz + interval '9 hours',
+select pg_temp.sid('tx:' || b.id), b.user_id, 'a0000000-0000-4000-8000-000000000001', b.due_date::timestamptz + interval '9 hours',
   -b.amount, 'CNY', 'BILLPAY ' || bl.name, bl.merchant_id,
   case b.biller_id when 'LANDLORD_WANG' then 'housing' when 'SZ_POWER' then 'utilities' else 'telecom' end,
   'tx:' || b.id, 'mock_bank'
@@ -141,7 +147,7 @@ where b.status = 'paid';
 
 insert into public.transactions (id, user_id, account_id, posted_at, amount, currency, raw_descriptor, original_amount, original_currency,
   fx_rate, fx_rate_date, merchant_id, category, source_id, origin)
-select md5('tx:sub:' || s.id || ':' || m)::uuid, s.user_id, 'a0000000-0000-4000-8000-000000000001',
+select pg_temp.sid('tx:sub:' || s.id || ':' || m), s.user_id, 'a0000000-0000-4000-8000-000000000001',
   (s.last_charged - (m * 30))::timestamptz + interval '3 hours',
   case when s.billing_currency = 'USD' then -round(s.original_amount * (7.10 + (m % 4) * 0.01), 2) else -s.amount end,
   'CNY', upper(mc.aliases[1]),
@@ -155,7 +161,7 @@ cross join generate_series(0, 5) m
 where s.status = 'active';
 
 insert into public.transactions (id, user_id, account_id, posted_at, amount, currency, raw_descriptor, merchant_id, category, source_id, origin)
-select md5('tx:spend:' || i)::uuid, '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000001',
+select pg_temp.sid('tx:spend:' || i), '11111111-1111-4111-8111-111111111111', 'a0000000-0000-4000-8000-000000000001',
   now() - make_interval(days => i * 4 + 1, hours => (i * 7) % 12),
   -(round((35 + (i * 37) % 160)::numeric, 2) + ((i * 13) % 100) / 100.0),
   'CNY',
@@ -198,11 +204,11 @@ insert into public.prepaid_offers (id, merchant_id, unit_price, units, cancel_fe
 insert into public.prepaid_plans (id, user_id, chain_plan_id, merchant_id, unit_price, units_total, units_redeemed, cancel_fee_bps,
   agent_address, status, purchase_tx, origin, last_synced_block)
 values ('9a000000-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', 1, 'FITBOX_FUTIAN', 10000, 60, 12, 1000,
-  '0xa9e7000000000000000000000000000000000a9e', 'active', 'mock:' || md5('purchase:1')::uuid, 'chain', 0);
+  '0xa9e7000000000000000000000000000000000a9e', 'active', 'mock:' || pg_temp.sid('purchase:1'), 'chain', 0);
 
 insert into public.prepaid_sessions (plan_id, user_id, session_no, tx_hash, redeemed_at)
 select '9a000000-0000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', n,
-  'mock:' || md5('redeem:1:' || n)::uuid, now() - make_interval(days => (13 - n) * 7)
+  'mock:' || pg_temp.sid('redeem:1:' || n), now() - make_interval(days => (13 - n) * 7)
 from generate_series(1, 12) n;
 
 insert into public.risk_signals (merchant_id, kind, level, summary, source_ids, origin, simulated, observed_at) values
