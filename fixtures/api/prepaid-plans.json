@@ -1,0 +1,156 @@
+{
+  "baseCurrency": "CNY",
+  "plans": [
+    {
+      "id": "00000004-0000-4000-8000-000000000001",
+      "chainPlanId": "1",
+      "merchant": {
+        "id": "FITBOX_FUTIAN",
+        "name": "FitBox Futian",
+        "riskLevel": "watch"
+      },
+      "unitPrice": {
+        "amount": 100,
+        "currency": "CNY"
+      },
+      "unitsTotal": 60,
+      "unitsRedeemed": 12,
+      "balanceInEscrow": {
+        "amount": 4800,
+        "currency": "CNY"
+      },
+      "cancelFeeBps": 1000,
+      "status": "active",
+      "purchaseTx": {
+        "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000001",
+        "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000001",
+        "simulated": false
+      },
+      "sessions": [
+        {
+          "sessionNo": 1,
+          "redeemedAt": "2026-08-01T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000065",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000065",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 2,
+          "redeemedAt": "2026-08-05T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000066",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000066",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 3,
+          "redeemedAt": "2026-08-09T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000067",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000067",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 4,
+          "redeemedAt": "2026-08-15T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000068",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000068",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 5,
+          "redeemedAt": "2026-08-22T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000069",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000069",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 6,
+          "redeemedAt": "2026-08-29T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006a",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006a",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 7,
+          "redeemedAt": "2026-09-05T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006b",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006b",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 8,
+          "redeemedAt": "2026-09-12T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006c",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006c",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 9,
+          "redeemedAt": "2026-09-19T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006d",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006d",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 10,
+          "redeemedAt": "2026-09-26T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006e",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006e",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 11,
+          "redeemedAt": "2026-10-03T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006f",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c0000006f",
+            "simulated": false
+          }
+        },
+        {
+          "sessionNo": 12,
+          "redeemedAt": "2026-10-10T11:30:00.000Z",
+          "tx": {
+            "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070",
+            "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070",
+            "simulated": false
+          }
+        }
+      ],
+      "signals": [
+        {
+          "tier": "soft",
+          "kind": "complaints",
+          "level": "watch",
+          "summary": "Complaints about FitBox Futian rose from 2 to 7 this week (simulated feed).",
+          "observedAt": "2026-10-15T02:00:00.000Z",
+          "source": {
+            "origin": "simulated",
+            "sourceId": "sim:complaints-fitbox-2026-w42",
+            "simulated": true
+          }
+        }
+      ],
+      "testTokenNotice": "Test token, no value"
+    }
+  ]
+}

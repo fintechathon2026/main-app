@@ -1,0 +1,130 @@
+{
+  "baseCurrency": "CNY",
+  "items": [
+    {
+      "id": "00000002-0000-4000-8000-000000000001",
+      "merchant": {
+        "id": "00000001-0000-4000-8000-000000000001",
+        "name": "ChatGPT Plus",
+        "category": "software"
+      },
+      "status": "active",
+      "cycleDays": 30,
+      "amount": {
+        "amount": 20,
+        "currency": "USD",
+        "base": {
+          "amount": 142,
+          "currency": "CNY",
+          "rate": 7.12,
+          "rateDate": "2026-10-16"
+        }
+      },
+      "nextRenewal": "2026-10-24",
+      "trial": null,
+      "priceChange": null,
+      "usage": null,
+      "annualCost": {
+        "amount": 1709,
+        "currency": "CNY"
+      },
+      "confidence": 0.9,
+      "detectionSource": "mock_bank"
+    },
+    {
+      "id": "00000002-0000-4000-8000-000000000002",
+      "merchant": {
+        "id": "00000001-0000-4000-8000-000000000002",
+        "name": "iQIYI",
+        "category": "video"
+      },
+      "status": "active",
+      "cycleDays": 30,
+      "amount": {
+        "amount": 30,
+        "currency": "CNY"
+      },
+      "nextRenewal": "2026-11-05",
+      "trial": null,
+      "priceChange": {
+        "from": {
+          "amount": 25,
+          "currency": "CNY"
+        },
+        "to": {
+          "amount": 30,
+          "currency": "CNY"
+        },
+        "at": "2026-09-05"
+      },
+      "usage": null,
+      "annualCost": {
+        "amount": 360,
+        "currency": "CNY"
+      },
+      "confidence": 0.95,
+      "detectionSource": "mock_bank"
+    },
+    {
+      "id": "00000002-0000-4000-8000-000000000003",
+      "merchant": {
+        "id": "00000001-0000-4000-8000-000000000003",
+        "name": "NetEase Cloud Music",
+        "category": "music"
+      },
+      "status": "active",
+      "cycleDays": 30,
+      "amount": {
+        "amount": 15,
+        "currency": "CNY"
+      },
+      "nextRenewal": "2026-10-29",
+      "trial": null,
+      "priceChange": null,
+      "usage": {
+        "lastUsedAt": "2026-10-02",
+        "sessionsPerMonth": 1,
+        "source": {
+          "origin": "simulated",
+          "sourceId": "sim:netease-usage-2026-10",
+          "simulated": true
+        }
+      },
+      "annualCost": {
+        "amount": 180,
+        "currency": "CNY"
+      },
+      "confidence": 0.9,
+      "detectionSource": "mock_bank"
+    },
+    {
+      "id": "00000002-0000-4000-8000-000000000004",
+      "merchant": {
+        "id": "00000001-0000-4000-8000-000000000004",
+        "name": "Tencent Video",
+        "category": "video"
+      },
+      "status": "trial",
+      "cycleDays": 30,
+      "amount": {
+        "amount": 30,
+        "currency": "CNY"
+      },
+      "nextRenewal": null,
+      "trial": {
+        "endsAt": "2026-10-21",
+        "autoCancelAt": "2026-10-20",
+        "keepFlag": false,
+        "origin": "mock_bank"
+      },
+      "priceChange": null,
+      "usage": null,
+      "annualCost": {
+        "amount": 360,
+        "currency": "CNY"
+      },
+      "confidence": 1,
+      "detectionSource": "mock_bank"
+    }
+  ]
+}

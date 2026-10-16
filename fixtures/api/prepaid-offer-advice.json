@@ -1,0 +1,25 @@
+{
+  "offerId": "00000005-0000-4000-8000-000000000001",
+  "savings": {
+    "amount": 1500,
+    "currency": "CNY"
+  },
+  "breakEvenSessions": 48,
+  "expectedSessions": 60,
+  "closureRate": {
+    "value": 0.1,
+    "source": "default",
+    "note": "Default annual closure rate for gyms (2022 figure, PRD §2.2.1) [verify primary source]."
+  },
+  "periodClosureProbability": 0.1,
+  "expectedLossWithoutEscrow": {
+    "amount": 300,
+    "currency": "CNY"
+  },
+  "expectedLossWithEscrow": {
+    "amount": 0,
+    "currency": "CNY"
+  },
+  "escrowAvailable": true,
+  "recommendation": "prepay_escrow"
+}
