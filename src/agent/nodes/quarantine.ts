@@ -23,11 +23,16 @@ export const readDocuments: NodeFn = async (state, config) => {
   return { extracted };
 };
 
-/** Node "signal_reader": a warning for the merchant named by subjectId (trigger prepaid_risk). */
+/**
+ * Node "signal_reader" (trigger prepaid_risk): subjectId is the prepaid plan id; the merchant is
+ * resolved from the user's own plan row, then the Signal Reader returns a warning for it.
+ */
 export const readSignals: NodeFn = async (state, config) => {
-  const { signalReader } = getDeps(config);
+  const { signalReader, store } = getDeps(config);
   if (!state.subjectId) return {};
-  const warning = await signalReader.read(state.subjectId);
+  const merchantId = await store.prepaidPlanMerchant(state.subjectId, state.userId);
+  if (!merchantId) return {};
+  const warning = await signalReader.read(merchantId);
   if (!warning) return {};
-  return { warnings: [keepUntrusted(warning, "web", state.subjectId)] };
+  return { warnings: [keepUntrusted(warning, "web", merchantId)] };
 };

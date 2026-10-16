@@ -22,6 +22,8 @@ export interface PlanStore {
   createApproval(actionId: string, userId: string): Promise<string>;
   recordDeny(actionIds: string[], userId: string): Promise<void>;
   auditRowsForPlan(planId: string, userId: string): Promise<AuditRow[]>;
+  /** Merchant of a prepaid plan the user owns (trigger prepaid_risk carries the plan id). */
+  prepaidPlanMerchant(planId: string, userId: string): Promise<string | null>;
 }
 
 export type AuditRow = {

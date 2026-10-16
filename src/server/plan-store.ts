@@ -89,6 +89,16 @@ export class PgPlanStore implements PlanStore {
     });
   }
 
+  async prepaidPlanMerchant(planId: string, userId: string): Promise<string | null> {
+    return withUserTx(userId, async (tx) => {
+      const r = await tx.query<{ merchant_id: string }>(
+        "select merchant_id from public.prepaid_plans where id = $1 and user_id = $2",
+        [planId, userId],
+      );
+      return r.rows[0]?.merchant_id ?? null;
+    });
+  }
+
   async auditRowsForPlan(planId: string, userId: string): Promise<AuditRow[]> {
     return withUserTx(userId, async (tx) => {
       const r = await tx.query(
