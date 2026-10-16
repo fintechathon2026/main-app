@@ -71,10 +71,12 @@ export type SubscriptionContext = {
   baseCurrency: string;
   subs: EnrichedSubscription[];
   transactions: TransactionRow[];
+  /** Posting-date rates (≤ 7 days old) for the users' foreign billing currencies. */
+  rateOn: RateLookup;
 };
 
 /** Outflows as positive charges, grouped by merchant. */
-function chargesByMerchant(txs: readonly TransactionRow[]): Map<string, ChargeTx[]> {
+export function chargesByMerchant(txs: readonly TransactionRow[]): Map<string, ChargeTx[]> {
   const m = new Map<string, ChargeTx[]>();
   for (const t of txs) {
     if (!t.merchant_id || !(t.amount < 0)) continue;
@@ -207,7 +209,7 @@ export async function loadSubscriptionContext(d: ViewDeps, status?: string | nul
         : null;
     return { row, item, monthlyBase: savings ? savings.monthlyBase.amount : null, fx, detection, firstPaidChargeAt: firstPaid, fxCost };
   });
-  return { settings, baseCurrency: base, subs, transactions: txs };
+  return { settings, baseCurrency: base, subs, transactions: txs, rateOn };
 }
 
 export async function buildSubscriptions(d: ViewDeps, status?: string | null): Promise<SubscriptionsResponse> {

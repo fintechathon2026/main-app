@@ -16,6 +16,8 @@ import {
   buildSummary,
 } from "@/src/server/db/read/views";
 import { getRate, storeFxRates } from "@/src/server/fx/frankfurter";
+import { runDetectForUser } from "@/src/server/db/read/detect-job";
+import { recordJobRun } from "@/src/server/db/read/detect-store";
 import * as S from "./api-schemas";
 
 const URL_ = process.env.DATABASE_URL;
@@ -98,6 +100,21 @@ describe.skipIf(!URL_)("read side on the real schema (local Supabase)", () => {
     expect(await r.keepTrial(LIN, trial.id)).toBe("ok");
     expect(await r.keepTrial(LIN, paid.id)).toBe("not_trial");
     expect(await r.keepTrial(STRANGER, trial.id)).toBe("not_found");
+  });
+
+  it("detect job writes valid SQL (rolled back) and job_runs bookkeeping works", async () => {
+    const c = await pool.connect();
+    try {
+      await c.query("begin");
+      await c.query("select set_config('app.user_id', $1, true)", [LIN]);
+      const r = await recordJobRun(c, "detect_test", () => runDetectForUser(LIN, now(), { repos: repos(), tx: async (_u, fn) => fn(c) }), (x) => x);
+      expect(r.userId).toBe(LIN);
+      const { rows } = await c.query("select count(*)::int as n from public.recommendations where user_id = $1 and status = 'open'", [LIN]);
+      expect(rows[0].n).toBe(r.recommendations);
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
   });
 
   it("FX upsert on (date, base, quote) and getRate staleness", async () => {
