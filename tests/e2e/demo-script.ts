@@ -118,8 +118,10 @@ function reader(input: string): unknown {
   const doc = (JSON.parse(input) as { text: string }).text;
   const grab = (re: RegExp) => doc.match(re)?.[1]?.trim();
   const account = grab(/Customer account:\s*(⟦[A-Z]+_\d+⟧|[0-9 -]+)/);
+  // The biller is the letterhead; a parenthetical that reads like an instruction is dropped.
+  const letterhead = grab(/^([^\n]+)/) ?? "Unknown biller";
   return {
-    biller_name: grab(/^(.*\(SZ_POWER\))/m) ?? grab(/^([^\n]+)/) ?? "Unknown biller",
+    biller_name: /\(.*:/.test(letterhead) ? letterhead.split(" (")[0] : letterhead,
     amount: Number(grab(/Amount due:\s*[A-Z]{3}\s*([\d.,]+)/)?.replace(/,/g, "") ?? 0),
     currency: grab(/Amount due:\s*([A-Z]{3})/) ?? "CNY",
     due_date: grab(/Due date:\s*(\d{4}-\d{2}-\d{2})/) ?? "",
