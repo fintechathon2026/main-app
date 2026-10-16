@@ -24,17 +24,18 @@ function checkKey(key: string): string {
   return key;
 }
 
-export function createLocalDocumentStorage(dir = join(process.cwd(), ".data", "documents")): DocumentStorage {
-  const root = resolve(dir);
+// Dev-only local storage: the turbopackIgnore hints keep the build from tracing the whole project.
+export function createLocalDocumentStorage(dir?: string): DocumentStorage {
+  const root = resolve(/*turbopackIgnore: true*/ dir ?? join(process.cwd(), ".data", "documents"));
   const pathFor = (key: string) => {
-    const p = resolve(root, checkKey(key));
+    const p = resolve(/*turbopackIgnore: true*/ root, checkKey(key));
     if (!p.startsWith(root + sep)) throw new Error("invalid document key");
     return p;
   };
   return {
     async put(key, bytes) {
       const p = pathFor(key);
-      await mkdir(resolve(p, ".."), { recursive: true, mode: 0o700 });
+      await mkdir(resolve(/*turbopackIgnore: true*/ p, ".."), { recursive: true, mode: 0o700 });
       await writeFile(p, bytes, { mode: 0o600 });
       return `local:${key}`;
     },
