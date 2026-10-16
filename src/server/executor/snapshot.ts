@@ -6,9 +6,11 @@
 import type { PoolClient } from "pg";
 import type { GateSnapshot, Origin, PrepaidFacts, TypedAction } from "@/src/core/types";
 import { actionHash, hashPolicy } from "@/src/core/mandate/canonical";
-import { parsePolicy } from "@/src/core/mandate/schema";
+import { parsePolicy, type Policy } from "@/src/core/mandate/schema";
 import { approvalState } from "@/src/server/approvals";
 import type { EscrowPlanState } from "@/src/server/adapters/settlement/types";
+import { AttestationWire, recoverAttestationSigner } from "@/src/server/risk/attestation";
+import { attestationDomainFromEnv, attestationKindFromCode } from "@/src/sim/registry/eip712";
 
 export type ActionRow = {
   id: string;
@@ -100,7 +102,7 @@ export async function buildSnapshot(
 
   if (action.tool === "pay_bill") await payBillFacts(tx, snap, userId, args, ctx, policy?.global.per_payee_daily_cap);
   if (action.tool === "cancel_subscription") await subscriptionFacts(tx, snap, userId, str(args.subscription_id), ctx);
-  if (action.tool.startsWith("prepaid_")) await prepaidFacts(tx, snap, action, phaseA, ctx);
+  if (action.tool.startsWith("prepaid_")) await prepaidFacts(tx, snap, action, phaseA, ctx, policy);
   return snap;
 }
 
@@ -190,7 +192,39 @@ async function subscriptionFacts(tx: PoolClient, snap: GateSnapshot, userId: str
   snap.provenance = { ...snap.provenance, trialStatusOrigin: snap.subscription.trialOrigin };
 }
 
-async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRow, phaseA: PhaseAFacts, ctx: UserCtx) {
+type AttestationCandidate = {
+  id: string;
+  kind: "court_enforcement" | "closure_notice";
+  case_ref_hash: string;
+  issued_at: Date;
+  expires_at: Date;
+  signature: string;
+  raw_json: unknown;
+};
+
+/**
+ * True only when the stored record is a well-formed EIP-712 attestation whose fields match the
+ * row's columns and the merchant's chain address, and whose signature recovers to the oracle
+ * (architecture §24.9). The stored sig_valid is a UI cache and is never used here.
+ */
+async function attestationVerifies(c: AttestationCandidate, merchantAddress: string, oracle: string): Promise<boolean> {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(oracle)) return false;
+  const parsed = AttestationWire.safeParse(c.raw_json);
+  if (!parsed.success) return false;
+  const w = parsed.data;
+  const consistent =
+    w.merchant.toLowerCase() === merchantAddress.toLowerCase() &&
+    attestationKindFromCode(w.kind) === c.kind &&
+    w.caseRef.toLowerCase() === c.case_ref_hash.toLowerCase() &&
+    w.issuedAt * 1000 === new Date(c.issued_at).getTime() &&
+    w.expiresAt * 1000 === new Date(c.expires_at).getTime() &&
+    w.signature === c.signature;
+  if (!consistent) return false;
+  const signer = await recoverAttestationSigner(w, attestationDomainFromEnv());
+  return !!signer && signer.toLowerCase() === oracle.toLowerCase();
+}
+
+async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRow, phaseA: PhaseAFacts, ctx: UserCtx, policy: Policy | null) {
   const userId = action.user_id;
   const planId = str(action.args_json.plan_id);
   const wallet = await tx.query("select address from public.wallets where user_id = $1 and kind = 'consumer_browser'", [userId]);
@@ -223,22 +257,35 @@ async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRo
     facts.agentIsOurs = !!agentAddr && !!chain.agent && chain.agent.toLowerCase() === agentAddr.toLowerCase();
 
     if (action.tool === "prepaid_exit") {
-      const att = await tx.query(
-        `select merchant_id, kind, signer, sig_valid, issued_at, expires_at from public.attestations
-          where merchant_id = $1 order by issued_at desc limit 1`,
-        [row.merchant_id],
+      // Candidates: this merchant, a kind the mandate auto-exits on, unexpired and within the
+      // mandate's max age, newest first. sig_valid only narrows the search; the signature is
+      // re-verified below and only a verified record can be chosen.
+      const kinds = policy?.prepaid.auto_exit_on ?? [];
+      const maxAgeDays = policy?.prepaid.attestation_max_age_days ?? 0;
+      const att = await tx.query<AttestationCandidate>(
+        `select id, kind, case_ref_hash, issued_at, expires_at, signature, raw_json from public.attestations
+          where merchant_id = $1 and kind = any($2::text[]) and sig_valid
+            and expires_at > $3::timestamptz and issued_at <= $3::timestamptz
+            and issued_at >= $3::timestamptz - make_interval(days => $4::int)
+          order by issued_at desc, id limit 10`,
+        [row.merchant_id, kinds, ctx.now, maxAgeDays],
       );
-      const a = att.rows[0];
-      const oracle = (process.env.ORACLE_ADDRESS ?? "").toLowerCase();
-      // MINIMAL: trusts the stored sig_valid + signer. R2 must replace this with EIP-712
-      // signature recovery (viem recoverTypedDataAddress) at decision time (architecture §24.9).
-      facts.attestation = a
+      const oracle = process.env.ORACLE_ADDRESS ?? "";
+      let chosen: AttestationCandidate | null = null;
+      for (const c of att.rows) {
+        if (await attestationVerifies(c, String(row.chain_address), oracle)) {
+          chosen = c;
+          break;
+        }
+      }
+      facts.attestation = chosen
         ? {
-            signerIsOracle: !!oracle && String(a.signer).toLowerCase() === oracle && a.sig_valid === true,
-            kind: a.kind,
-            merchantMatches: a.merchant_id === row.merchant_id,
-            ageDays: (Date.parse(ctx.now) - new Date(a.issued_at).getTime()) / DAY_MS,
-            expired: new Date(a.expires_at).getTime() <= Date.parse(ctx.now),
+            id: chosen.id,
+            signerIsOracle: true,
+            kind: chosen.kind,
+            merchantMatches: true, // checked against the merchant's chain address above
+            ageDays: (Date.parse(ctx.now) - new Date(chosen.issued_at).getTime()) / DAY_MS,
+            expired: new Date(chosen.expires_at).getTime() <= Date.parse(ctx.now),
           }
         : null;
     }

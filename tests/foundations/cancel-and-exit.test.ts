@@ -10,23 +10,33 @@ import { getMockbankPool, setMockbankPool } from "@/src/mockbank/db";
 import { createExecutor } from "@/src/server/executor";
 import { PgPlanStore } from "@/src/server/plan-store";
 import { DB_ENABLED, adminPool, createTestUser, inProcessTransport } from "./helpers";
+import { insertSignedAttestation, randomKey, setTestOracle } from "./attestations";
 
 const AGENT = "0xa9e7000000000000000000000000000000000a9e";
-const ORACLE = "0x0dac1e0000000000000000000000000000000001";
 
 describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
   let admin: Pool;
-  const executor = createExecutor({ transport: inProcessTransport });
+  /** Mock bank request bodies, to see what settlement was sent. */
+  const sent: { path: string; body: Record<string, unknown> }[] = [];
+  const executor = createExecutor({
+    transport: async (req) => {
+      const body = req.method === "POST" ? ((await req.clone().json().catch(() => null)) as Record<string, unknown> | null) : null;
+      if (body) sent.push({ path: new URL(req.url).pathname, body });
+      return inProcessTransport(req);
+    },
+  });
   const store = new PgPlanStore(executor);
+  let restoreOracle: () => void;
 
   beforeAll(() => {
     process.env.MOCKBANK_API_KEY ??= "test-mockbank-key";
     process.env.AGENT_ADDRESS ??= AGENT;
-    process.env.ORACLE_ADDRESS ??= ORACLE;
+    restoreOracle = setTestOracle();
     admin = adminPool();
   });
 
   afterAll(async () => {
+    restoreOracle();
     await admin.end();
     await getPool().end();
     setPool(null);
@@ -115,11 +125,7 @@ describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
 
   it("attested prepaid exit refunds the owner on the mock escrow", async () => {
     const { u, planId, merchantId, chainPlanId } = await prepaidUser();
-    await admin.query(
-      `insert into public.attestations (merchant_id, kind, case_ref_hash, issued_at, expires_at, signer, signature, sig_valid, raw_json)
-       values ($1, 'court_enforcement', $2, now() - interval '2 hours', now() + interval '7 days', $3, '0xsig', true, '{}')`,
-      [merchantId, randomUUID(), ORACLE],
-    );
+    await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), issuedAgoSeconds: 7200, validForSeconds: 7 * 86_400 });
     const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
     const r = await executor.run(id, u.id);
     expect(r.status).toBe("succeeded");
@@ -130,5 +136,41 @@ describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
     expect(pp.rows[0].status).toBe("exited_attested");
     // Re-running does not exit twice.
     expect((await executor.run(id, u.id)).status).toBe("succeeded");
+  });
+
+  it("a forged attestation with a tampered sig_valid cache does not authorize an attested exit", async () => {
+    const { u, planId, merchantId, chainPlanId } = await prepaidUser();
+    await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), signerKey: randomKey(), claimValid: true });
+    const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
+    const r = await executor.run(id, u.id);
+    expect(r.status).not.toBe("succeeded");
+    expect(r.gate?.decision).not.toBe("allow");
+    const ep = await admin.query("select status from mockbank.escrow_plans where chain_plan_id = $1", [chainPlanId]);
+    expect(ep.rows[0].status).toBe("active");
+  });
+
+  it("an attestation signed for another merchant does not authorize an attested exit", async () => {
+    const { u, planId, merchantId } = await prepaidUser();
+    await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), merchantAddress: "0x" + "ab".repeat(20) });
+    const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
+    expect((await executor.run(id, u.id)).status).not.toBe("succeeded");
+  });
+
+  it("decides on the newest verified attestation and settles with exactly that id", async () => {
+    const { u, planId, merchantId } = await prepaidUser();
+    const valid = await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), issuedAgoSeconds: 7200 });
+    // Newer records that must not be chosen: a forgery with a tampered cache, and one marked invalid.
+    await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), issuedAgoSeconds: 600, signerKey: randomKey(), claimValid: true });
+    await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), issuedAgoSeconds: 300, signerKey: randomKey() });
+    const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
+    const r = await executor.run(id, u.id);
+    expect(r.status).toBe("succeeded");
+    const exit = sent.find((s) => s.path.endsWith("/exit-attested") && s.body.idempotency_key !== undefined && s.body.attestation_id === valid);
+    expect(exit).toBeDefined();
+    const audit = await admin.query(
+      "select event_json->>'attestationId' as att from public.audit_log where user_id = $1 and event_type = 'decision' and event_json->>'phase' = 'execute'",
+      [u.id],
+    );
+    expect(audit.rows.map((x) => x.att)).toEqual([valid]);
   });
 });

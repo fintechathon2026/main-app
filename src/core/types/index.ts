@@ -125,6 +125,8 @@ export type PrepaidFacts = {
   merchantSigValid?: boolean;
   sessionNo?: number;
   attestation?: {
+    /** attestations.id of the record the decision used; settlement uses exactly this one. */
+    id?: string;
     signerIsOracle: boolean;
     kind: "court_enforcement" | "closure_notice";
     merchantMatches: boolean;

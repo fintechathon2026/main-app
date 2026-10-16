@@ -31,6 +31,7 @@ import { createLocalDocumentStorage } from "@/src/server/ingest/storage";
 import { createDocumentLoader, ingestUpload, type IngestResult } from "@/src/server/ingest/upload";
 import { PgPlanStore } from "@/src/server/plan-store";
 import { inProcessTransport } from "../foundations/helpers";
+import { caseRefFor, insertSignedAttestation, setTestOracle } from "../foundations/attestations";
 
 // ---- Seeded ids ---------------------------------------------------------------------------
 
@@ -59,8 +60,9 @@ export const FITBOX_ESCROW_BALANCE = 48 * 10000; // fen
 
 export const ATTACK_PDF = "evals/cases/attacks/pdf_hidden_white_text.pdf";
 export const SOFT_SIGNALS = "evals/cases/attacks/signals_injected_instructions.json";
-/** Case ref of the attestation the flows insert (removed again by restorePrepaid). */
-export const ATTESTATION_CASE_REF = "e2e:court-enforcement:fitbox-futian";
+/** Case ref label of the attestation the flows insert (removed again by restorePrepaid). */
+export const ATTESTATION_CASE_LABEL = "e2e:court-enforcement:fitbox-futian";
+export const ATTESTATION_CASE_REF = caseRefFor(ATTESTATION_CASE_LABEL).toLowerCase();
 
 export function repoFile(rel: string): Uint8Array {
   return new Uint8Array(readFileSync(path.join(process.cwd(), rel)));
@@ -322,17 +324,19 @@ export async function trialFlow(env: LinEnv, admin: Pool): Promise<FlowResult> {
 
 /**
  * The registry publishes a court-enforcement record and the oracle signs it (the sim's job),
- * then cron/risk runs the agent for the merchant. No soft signals in this run.
+ * then cron/risk runs the agent for the merchant. No soft signals in this run. The executor
+ * re-verifies the EIP-712 signature against ORACLE_ADDRESS, so the record is signed with the
+ * test oracle key and ORACLE_ADDRESS points at it for the run.
  */
 export async function attestedExitFlow(env: LinEnv, admin: Pool): Promise<FlowResult> {
-  await admin.query(
-    `insert into public.attestations (merchant_id, kind, case_ref_hash, issued_at, expires_at, signer, signature, sig_valid, raw_json)
-     values ($1, 'court_enforcement', $2, now() - interval '1 hour', now() + interval '30 days', $3, 'mock:oracle-signature', true, '{}')
-     on conflict (merchant_id, kind, case_ref_hash) do update set issued_at = excluded.issued_at, expires_at = excluded.expires_at`,
-    [FITBOX, ATTESTATION_CASE_REF, process.env.ORACLE_ADDRESS ?? ""],
-  );
+  await insertSignedAttestation(admin, { merchantId: FITBOX, caseLabel: ATTESTATION_CASE_LABEL, issuedAgoSeconds: 3600 });
   env.signals.bundle = null;
-  return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX_PLAN }, env)));
+  const restoreOracle = setTestOracle();
+  try {
+    return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX_PLAN }, env)));
+  } finally {
+    restoreOracle();
+  }
 }
 
 /** Lin taps Approve (POST /api/approvals/:id), and the handler resumes the plan. */

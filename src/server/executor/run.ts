@@ -76,7 +76,9 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
     const facts = await phaseA(userId, action, escrow);
 
     // ---- Phase B ------------------------------------------------------------------------
-    type B = { kind: "stop"; res: ExecResult } | { kind: "go"; gate: GateResult; row: ActionRow; approved: boolean };
+    type B =
+      | { kind: "stop"; res: ExecResult }
+      | { kind: "go"; gate: GateResult; row: ActionRow; approved: boolean; attestationId: string | null };
     const b = await withUserTx<B>(userId, async (tx) => {
       const ctx = await userCtx(tx, userId);
       await tx.query("insert into public.daily_limits (user_id, day) values ($1, $2) on conflict do nothing", [userId, ctx.day]);
@@ -90,10 +92,12 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
 
       const snap = await buildSnapshot(tx, cur, ctx, facts);
       const gate = decide(typedAction(cur), snap);
+      // The attestation the decision used; settlement passes exactly this one (never re-selects).
+      const attestationId = snap.prepaid?.attestation?.id ?? null;
       await appendAudit(tx, userId, {
         actor: "gate",
         eventType: "decision",
-        data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash, result: gate },
+        data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash, result: gate, ...(attestationId ? { attestationId } : {}) },
       });
 
       // PRD §10.6: mandate changed since planning and the decision changed -> cancel, re-plan.
@@ -140,15 +144,15 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         [actionId, gate.ruleIds, JSON.stringify(gate), ENTRY_STATUSES],
       );
       if (u.rowCount !== 1) throw new Error("action_state_changed");
-      return { kind: "go", gate, row: cur, approved };
+      return { kind: "go", gate, row: cur, approved, attestationId };
     });
     if (b.kind === "stop") return b.res;
 
     // ---- Phase C ------------------------------------------------------------------------
-    const { gate, row, approved } = b;
+    const { gate, row, approved, attestationId } = b;
     let outcome: { status: "succeeded" | "failed" | "unknown"; result: unknown; error?: string };
     try {
-      outcome = { status: "succeeded", result: await settle(row, approved) };
+      outcome = { status: "succeeded", result: await settle(row, approved, attestationId) };
     } catch (e) {
       const definitive = e instanceof SettlementError && e.definitive;
       const code = e instanceof Error ? e.message : String(e);
@@ -158,7 +162,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
     return { actionId, status: outcome.status, gate, result: outcome.result, error: outcome.error };
   }
 
-  async function settle(row: ActionRow, approved: boolean): Promise<unknown> {
+  async function settle(row: ActionRow, approved: boolean, attestationId: string | null): Promise<unknown> {
     const opts = { idempotencyKey: row.idempotency_key, customerId: row.user_id };
     const a = row.args_json;
     switch (row.tool) {
@@ -179,21 +183,17 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
       }
       case "prepaid_exit": {
         const ids = await withUserTx(row.user_id, async (tx) => {
-          const r = await tx.query(
-            `select p.chain_plan_id::text as chain_plan_id,
-                    (select a.id from public.attestations a where a.merchant_id = p.merchant_id order by issued_at desc limit 1) as attestation_id
-               from public.prepaid_plans p where p.id = $1`,
-            [a.plan_id],
-          );
-          return r.rows[0] as { chain_plan_id: string; attestation_id: string | null } | undefined;
+          const r = await tx.query("select chain_plan_id::text as chain_plan_id from public.prepaid_plans where id = $1", [a.plan_id]);
+          return r.rows[0] as { chain_plan_id: string } | undefined;
         });
         if (!ids) throw new SettlementError("plan_not_found", true);
+        if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
         const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
         // Approved path: the approval sheet stands in for the voluntary-exit signature (MOCK ONLY;
         // on chain this needs the consumer's exitVoluntaryBySig signature).
         const res = approved
           ? await escrow.exitVoluntary({ chainPlanId: ids.chain_plan_id }, sendOpts)
-          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: ids.attestation_id ?? "" }, sendOpts);
+          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId! }, sendOpts);
         if (res.status === "reverted") throw new SettlementError(res.reason, true, res);
         if (res.status === "pending") throw new SettlementError("pending", false, res);
         return { txHash: res.txHash, simulated: res.txHash.startsWith("mock:"), mode: approved ? "voluntary" : "attested", events: res.events };
