@@ -3,21 +3,16 @@
 // This is the only path from LLM output to an executable action, and it carries IDs and
 // amounts only; the executor re-derives everything else from the database.
 
-import { createHash } from "node:crypto";
-import canonicalize from "canonicalize";
+import { actionHash, sha256Hex } from "@/src/core/mandate/canonical";
 import { actionArgsSchemas, isAgentActionTool } from "../tools/action-schemas";
 import type { NodeFn } from "./graph-state";
 import { getDeps } from "./graph-state";
 
-export function sha256Hex(s: string): string {
-  return createHash("sha256").update(s).digest("hex");
-}
+export { sha256Hex };
 
-/** args_hash = sha256(tool + canonical(args)); the executor recomputes it before acting. */
+/** args_hash = sha256(tool + canonical(args)); one implementation shared with the executor. */
 export function argsHash(tool: string, args: Record<string, unknown>): string {
-  const canonical = canonicalize(args);
-  if (canonical === undefined) throw new Error("persist_plan: args are not JSON-serializable");
-  return sha256Hex(tool + canonical);
+  return actionHash(tool, args);
 }
 
 /** idempotency_key = sha256(planId + ":" + index); index is the position in `proposed`. */
