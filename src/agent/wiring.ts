@@ -1,21 +1,22 @@
 // Production wiring of AgentDeps (architecture §6.5, roles.md §4). Route handlers and cron jobs
 // get the graph, its dependencies and the plan registry from here; tests build their own.
 //
-// Owned by other roles and not on this branch yet, so they are typed placeholders that fail
-// loudly with "not wired" until integration:
-//   store        -> PlanStore from "@/src/server/plan-store"           (R2)
-//   executor     -> ActionExecutorPort from "@/src/server/executor/run" (R2)
-//   readTools    -> ReadTool[] from "@/src/agent/tools/read"            (R1, read side)
-//   reader       -> createDocumentReader({ models, loadDocument, savePiiMap })
-//                   from "@/src/agent/nodes/reader" (needs a loadDocument over ingest storage)
-//   signalReader -> createSignalReader({ models, fetchSignals })
-//                   from "@/src/agent/nodes/signal_reader"
-// Swap each placeholder for the real import when it lands; nothing else changes.
+//   store        -> PgPlanStore           (minimal R2 version, src/server/plan-store.ts)
+//   executor     -> getExecutor()         (minimal R2 version, src/server/executor)
+//   reader       -> createDocumentReader  over ingest storage (local dir in dev)
+//   signalReader -> createSignalReader    over the registry simulator (SIM_BASE_URL)
+//   readTools    -> read side (src/agent/tools/read), wired when it lands
 
-import type { ActionExecutorPort } from "@/src/core/types";
+import { PgPlanStore } from "@/src/server/plan-store";
+import { getExecutor } from "@/src/server/executor";
+import { createPgDocumentRepo } from "@/src/server/ingest/repo";
+import { getDocumentStorage } from "@/src/server/ingest/storage";
+import { createDocumentLoader } from "@/src/server/ingest/upload";
+import { createDocumentReader } from "./nodes/reader";
+import { createHttpSignalFetcher, createSignalReader } from "./nodes/signal_reader";
 import { compileGraph, type AgentGraph } from "./graph";
 import { getCheckpointer } from "./checkpointer";
-import type { AgentDeps, DocumentReaderPort, PlanStore, SignalReaderPort } from "./deps";
+import type { AgentDeps } from "./deps";
 import { createModelClients } from "./models";
 import { pgPlanRegistry, type RunEnv } from "./run";
 import type { ReadTool } from "./tools/types";
@@ -27,17 +28,6 @@ export class NotWiredError extends Error {
   }
 }
 
-/** An object whose every method rejects with NotWiredError. */
-function notWired<T extends object>(what: string, from: string): T {
-  return new Proxy({} as T, {
-    get: (_t, prop) => (prop === "then" ? undefined : () => Promise.reject(new NotWiredError(`${what}.${String(prop)}`, from))),
-  });
-}
-
-const store = notWired<PlanStore>("PlanStore", "@/src/server/plan-store");
-const executor = notWired<ActionExecutorPort>("ActionExecutor", "@/src/server/executor/run");
-const reader = notWired<DocumentReaderPort>("DocumentReader", "@/src/agent/nodes/reader (createDocumentReader)");
-const signalReader = notWired<SignalReaderPort>("SignalReader", "@/src/agent/nodes/signal_reader (createSignalReader)");
 // TODO(integration): replace with the read tools from "@/src/agent/tools/read".
 const readTools: ReadTool[] = [];
 
@@ -46,13 +36,24 @@ let graph: AgentGraph | null = null;
 
 export function getAgentDeps(): AgentDeps {
   if (!deps) {
+    const models = createModelClients();
     deps = {
-      models: createModelClients(),
+      models,
       readTools,
-      store,
-      executor,
-      reader,
-      signalReader,
+      store: new PgPlanStore(),
+      executor: getExecutor(),
+      reader: createDocumentReader({
+        models,
+        // Server-side job: no user token, so documents come from the server storage backend.
+        loadDocument: createDocumentLoader({ repo: createPgDocumentRepo(), storage: getDocumentStorage() }),
+      }),
+      signalReader: createSignalReader({
+        models,
+        fetchSignals: createHttpSignalFetcher({
+          baseUrl: process.env.SIM_BASE_URL ?? "http://localhost:3000",
+          apiKey: process.env.SIM_API_KEY,
+        }),
+      }),
       now: () => new Date().toISOString(),
     };
   }
