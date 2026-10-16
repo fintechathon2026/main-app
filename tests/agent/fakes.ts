@@ -36,7 +36,7 @@ export class FakeWorld {
   actions: ActionRow[] = [];
   approvals = new Map<string, { actionId: string; status: "pending" | "approved" | "consumed" }>();
   audit: AuditRow[] = [];
-  prepaidPlans = new Map<string, string>(); // prepaid plan id -> merchant id
+  prepaidPlans = new Map<string, string>([["plan_fitbox", "FITBOX_FUTIAN"]]); // prepaid plan id -> merchant id
   denies: string[][] = [];
   /** What the (fake) Gate decides per tool, now. */
   gate: Record<string, Decision> = { pay_bill: "allow", cancel_subscription: "require_confirm", prepaid_exit: "allow" };

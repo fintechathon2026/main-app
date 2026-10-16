@@ -138,9 +138,12 @@ async function runSignals(c: Case, model: ModelClient) {
   const signalSpy = new CapturingModelClient(model);
   const planner = new CapturingModelClient(quietPlanner);
   const h = harnessWith(planner, {
+    setup: (w) => {
+      w.prepaidPlans.set("plan_signals", bundle.merchantId);
+    },
     signalReader: () => createSignalReader({ models: { signal_reader: signalSpy }, fetchSignals: async () => bundle }),
   });
-  await h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: bundle.merchantId }), h.config);
+  await h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: "plan_signals" }), h.config);
   const state = (await h.graph.getState(h.config)).values as GraphStateT;
   return { planner, signalSpy, state, world: h.world };
 }

@@ -332,7 +332,7 @@ export async function attestedExitFlow(env: LinEnv, admin: Pool): Promise<FlowRe
     [FITBOX, ATTESTATION_CASE_REF, process.env.ORACLE_ADDRESS ?? ""],
   );
   env.signals.bundle = null;
-  return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX }, env)));
+  return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX_PLAN }, env)));
 }
 
 /** Lin taps Approve (POST /api/approvals/:id), and the handler resumes the plan. */
@@ -362,7 +362,7 @@ export async function runDemoPath(env: LinEnv, admin: Pool, log: (name: string, 
 export async function softSignalFlow(env: LinEnv): Promise<FlowResult> {
   env.signals.bundle = repoJson<SignalBundle>(SOFT_SIGNALS);
   try {
-    return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX }, env)));
+    return summarize(await drain(startPlan({ userId: LIN, trigger: "prepaid_risk", subjectId: FITBOX_PLAN }, env)));
   } finally {
     env.signals.bundle = null;
   }

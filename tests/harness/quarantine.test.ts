@@ -109,7 +109,7 @@ describe("harness: quarantined readers (H5)", () => {
       signalReader: () => createSignalReader({ models: { signal_reader: new DemoScriptModelClient() }, fetchSignals: async () => INJECTED }),
     });
     const updates: Record<string, string[]> = {};
-    const input = { ...initialInput("", { trigger: "prepaid_risk", subjectId: "FITBOX_FUTIAN" }), documentIds: ["doc-1"] };
+    const input = { ...initialInput("", { trigger: "prepaid_risk", subjectId: "plan_fitbox" }), documentIds: ["doc-1"] };
     for await (const chunk of await h.graph.stream(input, { ...h.config, streamMode: "updates" })) {
       for (const [node, update] of Object.entries(chunk as Record<string, object | null>)) updates[node] = Object.keys(update ?? {});
     }
@@ -130,7 +130,7 @@ describe("harness: Signal Reader output never becomes a prepaid_exit (T25)", () 
         },
         signalReader: () => createSignalReader({ models: { signal_reader: echoingSignals }, fetchSignals: async () => signals }),
       });
-      await h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: "FITBOX_FUTIAN" }), h.config);
+      await h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: "plan_fitbox" }), h.config);
       const state = (await h.graph.getState(h.config)).values;
       expect(state.warnings).toHaveLength(1);
       expect(state.warnings[0].origin).toBe("web");
@@ -147,7 +147,7 @@ describe("harness: Signal Reader output never becomes a prepaid_exit (T25)", () 
       },
       signalReader: () => createSignalReader({ models: { signal_reader: actionSignals }, fetchSignals: async () => INJECTED }),
     });
-    await expect(h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: "FITBOX_FUTIAN" }), h.config)).rejects.toThrow(
+    await expect(h.graph.invoke(initialInput("", { trigger: "prepaid_risk", subjectId: "plan_fitbox" }), h.config)).rejects.toThrow(
       /signal reader schema rejected/,
     );
     expect(h.models.requests).toEqual([]); // the Planner never ran
