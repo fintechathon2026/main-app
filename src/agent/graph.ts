@@ -1,7 +1,8 @@
 // The agent graph (architecture §6.1, PRD §11.6.1): an explicit StateGraph.
 //
 // load_context ─► reader? ─► signal_reader? ─► planner ⇄ read_tools
-//                                                 │
+//                                                 │ (captured action calls get a stub result and
+//                                                 │  loop back to planner until it stops calling tools)
 //                                           persist_plan ─► gate_preview ─┬─► execute ─┬─► explain ─► END
 //                                                 │                       │            └─► planner (re-plan, max 1)
 //                                                 └─► explain             ├─► create_approval ─► await_approval ─► execute
@@ -14,7 +15,7 @@ import { END, START, StateGraph, type BaseCheckpointSaver } from "@langchain/lan
 import { GraphState, type GraphStateT } from "./nodes/graph-state";
 import { loadContext } from "./nodes/load_context";
 import { readDocuments, readSignals } from "./nodes/quarantine";
-import { pendingReadCalls, planner } from "./nodes/planner";
+import { MAX_PLANNER_TURNS, pendingReadCalls, planner, plannerTurns } from "./nodes/planner";
 import { readToolsNode } from "./nodes/read_tools";
 import { persistPlan } from "./nodes/persist_plan";
 import { awaitApproval, createApproval, gatePreview, recordDeny } from "./nodes/decide_route";
@@ -41,10 +42,18 @@ function afterReader(s: GraphStateT) {
   return needsSignals(s) ? "signal_reader" : "planner";
 }
 
+/**
+ * Read calls pending -> read_tools. A turn whose calls were all answered in place (captured
+ * actions, unknown tools) -> back to the planner so it can continue. A turn without tool calls
+ * (or the turn budget spent) ends planning.
+ */
 function afterPlanner(s: GraphStateT, config: LangGraphRunnableConfig) {
   const deps = config.configurable?.deps as AgentDeps | undefined;
   const readNames = new Set((deps?.readTools ?? []).map((t) => t.spec.name));
-  return pendingReadCalls(s, readNames).length ? "read_tools" : "persist_plan";
+  if (pendingReadCalls(s, readNames).length) return "read_tools";
+  if (plannerTurns(s) >= MAX_PLANNER_TURNS) return "persist_plan";
+  const last = [...s.messages].reverse().find((m) => m.role === "assistant");
+  return last?.role === "assistant" && last.toolCalls?.length ? "planner" : "persist_plan";
 }
 
 function afterPersist(s: GraphStateT) {
@@ -79,7 +88,7 @@ export function buildGraph() {
     .addConditionalEdges("load_context", afterLoadContext, ["record_deny", "reader", "signal_reader", "planner"])
     .addConditionalEdges("reader", afterReader, ["signal_reader", "planner"])
     .addEdge("signal_reader", "planner")
-    .addConditionalEdges("planner", afterPlanner, ["read_tools", "persist_plan"])
+    .addConditionalEdges("planner", afterPlanner, ["read_tools", "planner", "persist_plan"])
     .addEdge("read_tools", "planner")
     .addConditionalEdges("persist_plan", afterPersist, ["gate_preview", "explain"])
     .addConditionalEdges("gate_preview", afterPreview, ["create_approval", "execute", "record_deny"])
