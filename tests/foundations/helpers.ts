@@ -102,9 +102,9 @@ export async function planPayments(store: PgPlanStore, userId: string, payments:
     planId,
     userId,
     mandateVersion: 3,
-    actions: payments.map((p) => {
+    actions: payments.map((p, idx) => {
       const args = { bill_id: p.billId, biller_id: p.billerId, amount: p.amount };
-      return { tool: "pay_bill", args, argsHash: actionHash("pay_bill", args), idempotencyKey: `test:${randomUUID()}` };
+      return { idx, tool: "pay_bill", args, argsHash: actionHash("pay_bill", args), idempotencyKey: `test:${randomUUID()}` };
     }),
   });
   return { planId, ids };

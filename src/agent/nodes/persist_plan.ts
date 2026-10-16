@@ -27,7 +27,7 @@ export const persistPlan: NodeFn = async (state, config) => {
   if (fresh.length === 0) return { actionIds: [], persistedCount: state.proposed.length };
   if (state.mandateVersion === null) throw new Error("persist_plan: no mandate version in state");
 
-  const actions: { tool: string; args: Record<string, unknown>; argsHash: string; idempotencyKey: string }[] = [];
+  const actions: { idx: number; tool: string; args: Record<string, unknown>; argsHash: string; idempotencyKey: string }[] = [];
   const feed: string[] = [];
   fresh.forEach((call, i) => {
     const index = offset + i;
@@ -42,6 +42,7 @@ export const persistPlan: NodeFn = async (state, config) => {
     }
     const args = parsed.data as Record<string, unknown>;
     actions.push({
+      idx: index,
       tool: call.name,
       args,
       argsHash: argsHash(call.name, args),

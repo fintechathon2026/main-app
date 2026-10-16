@@ -68,7 +68,7 @@ describe.skipIf(!DB_ENABLED)("harness: kill switch denies every action type (I-0
       planId,
       userId: u.id,
       mandateVersion: 3,
-      actions: calls.map((c) => ({ ...c, argsHash: actionHash(c.tool, c.args), idempotencyKey: `test:${randomUUID()}` })),
+      actions: calls.map((c, idx) => ({ ...c, idx, argsHash: actionHash(c.tool, c.args), idempotencyKey: `test:${randomUUID()}` })),
     });
     await killSwitch(u.id, true);
 

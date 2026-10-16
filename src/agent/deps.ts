@@ -9,12 +9,16 @@ import type { SignalWarning } from "./state";
 export type ModelClients = Record<ModelRole, ModelClient>;
 
 export interface PlanStore {
-  /** Insert action rows (upsert on idempotency_key); returns ids in order. */
+  /**
+   * Insert action rows (upsert on idempotency_key); returns ids in order. `idx` is the action's
+   * position in the plan's `proposed` list, the same index its idempotency key is built from,
+   * so a re-plan appends rows instead of colliding with the cancelled ones.
+   */
   persistActions(input: {
     planId: string;
     userId: string;
     mandateVersion: number;
-    actions: { tool: string; args: Record<string, unknown>; argsHash: string; idempotencyKey: string }[];
+    actions: { idx: number; tool: string; args: Record<string, unknown>; argsHash: string; idempotencyKey: string }[];
   }): Promise<string[]>;
   loadContext(userId: string): Promise<{ mandateVersion: number | null; mandateHash: string | null; killSwitch: boolean }>;
   /** Dry-run Gate decision for routing only; not a security boundary (architecture §6.3). */

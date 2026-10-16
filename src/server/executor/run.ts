@@ -10,7 +10,7 @@ import type { ActionExecutorPort, ExecResult, GateResult } from "@/src/core/type
 import { decide } from "@/src/core/gate/decide";
 import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
-import { consumeApproval } from "@/src/server/approvals";
+import { consumeApproval, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
 import {
@@ -102,6 +102,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
           "update public.actions set status = 'cancelled_replan', decision = $2, rule_ids = $3, gate_json = $4 where id = $1",
           [actionId, gate.decision, gate.ruleIds, JSON.stringify(gate)],
         );
+        await expireOpenApprovalsFor(tx, userId, [actionId], "cancelled_replan");
         return { kind: "stop", res: { actionId, status: "cancelled_replan", gate, replan: true } };
       }
 
@@ -114,6 +115,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
           gate.ruleIds,
           JSON.stringify(gate),
         ]);
+        if (status === "denied") await expireOpenApprovalsFor(tx, userId, [actionId], "denied");
         return { kind: "stop", res: { actionId, status, gate } };
       }
 

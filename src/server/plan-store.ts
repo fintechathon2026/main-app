@@ -8,7 +8,7 @@ import type { GateResult, Trigger } from "@/src/core/types";
 import { actionHash } from "@/src/core/mandate/canonical";
 import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
-import { createApprovalTx } from "@/src/server/approvals";
+import { createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { getExecutor, type ActionExecutor } from "@/src/server/executor";
 
 const AGENT_TOOLS = new Set(["pay_bill", "cancel_subscription", "prepaid_exit", "sweep_to_savings"]);
@@ -33,7 +33,7 @@ export class PgPlanStore implements PlanStore {
       const plan = await tx.query("select id from public.plans where id = $1 and user_id = $2", [input.planId, input.userId]);
       if (!plan.rowCount) throw new Error("plan_not_found");
       const ids: string[] = [];
-      for (const [idx, a] of input.actions.entries()) {
+      for (const a of input.actions) {
         if (!AGENT_TOOLS.has(a.tool)) throw new Error(`tool_not_allowed:${a.tool}`);
         // Defense in depth: the stored hash must be sha256(tool + canonical(args)).
         if (actionHash(a.tool, a.args) !== a.argsHash) throw new Error("args_hash_mismatch");
@@ -42,7 +42,7 @@ export class PgPlanStore implements PlanStore {
            values ($1, $2, $3, $4, 'agent', $5, $6, $7, $8, 'planned')
            on conflict (idempotency_key) do update set idempotency_key = excluded.idempotency_key
            returning id, plan_id, args_hash`,
-          [input.planId, input.userId, idx, a.tool, JSON.stringify(a.args), a.argsHash, input.mandateVersion, a.idempotencyKey],
+          [input.planId, input.userId, a.idx, a.tool, JSON.stringify(a.args), a.argsHash, input.mandateVersion, a.idempotencyKey],
         );
         const row = r.rows[0];
         if (row.plan_id !== input.planId || row.args_hash !== a.argsHash) throw new Error("idempotency_key_conflict");
@@ -85,7 +85,9 @@ export class PgPlanStore implements PlanStore {
           where id = any($1::uuid[]) and user_id = $2 and status in ('planned','ready','awaiting_approval') returning id`,
         [actionIds, userId],
       );
-      await appendAudit(tx, userId, { actor: "agent", eventType: "plan.denied", data: { actionIds: r.rows.map((x) => x.id) } });
+      const denied = r.rows.map((x) => x.id as string);
+      await expireOpenApprovalsFor(tx, userId, denied, "denied");
+      await appendAudit(tx, userId, { actor: "agent", eventType: "plan.denied", data: { actionIds: denied } });
     });
   }
 

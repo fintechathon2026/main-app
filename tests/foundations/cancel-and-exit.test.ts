@@ -40,7 +40,7 @@ describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
       planId,
       userId,
       mandateVersion: 3,
-      actions: [{ tool, args, argsHash: actionHash(tool, args), idempotencyKey: `test:${randomUUID()}` }],
+      actions: [{ idx: 0, tool, args, argsHash: actionHash(tool, args), idempotencyKey: `test:${randomUUID()}` }],
     });
     return id;
   }

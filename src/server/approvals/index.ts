@@ -33,10 +33,10 @@ export async function createApprovalTx(tx: PoolClient, userId: string, actionId:
   if (!action) throw new ApprovalError("not_found");
   if (!["planned", "ready", "awaiting_approval"].includes(action.status)) throw new ApprovalError("action_not_awaiting");
 
-  // Expire stale open approvals for this hash so the partial unique index admits a new one.
+  // Expire stale open approvals for this action so the partial unique index admits a new one.
   await tx.query(
-    "update public.approvals set status = 'expired' where action_hash = $1 and status in ('pending','approved') and expires_at <= now()",
-    [action.args_hash],
+    "update public.approvals set status = 'expired' where action_id = $1 and status in ('pending','approved') and expires_at <= now()",
+    [actionId],
   );
   const open = await tx.query(
     "select id from public.approvals where action_hash = $1 and action_id = $2 and status in ('pending','approved')",
@@ -124,6 +124,23 @@ export async function consumeApproval(tx: PoolClient, actionId: string, actionHa
     [actionId, actionHash],
   );
   return r.rowCount === 1;
+}
+
+/**
+ * Expire the open approvals of actions that ended without executing (denied, rejected,
+ * cancelled for a re-plan, expired), in the caller's transaction. An approval must never
+ * outlive its action: it would show a dead card and could block a later approval.
+ */
+export async function expireOpenApprovalsFor(tx: PoolClient, userId: string, actionIds: string[], reason: string): Promise<void> {
+  if (actionIds.length === 0) return;
+  const r = await tx.query(
+    `update public.approvals set status = 'expired', reason = coalesce(reason, $3)
+      where user_id = $1 and action_id = any($2::uuid[]) and status in ('pending','approved') returning id, action_id`,
+    [userId, actionIds, reason],
+  );
+  for (const row of r.rows) {
+    await appendAudit(tx, userId, { actor: "system", eventType: "approval.expired", data: { approvalId: row.id, actionId: row.action_id, reason } });
+  }
 }
 
 /** Cleanup job: expire open approvals past expiry for one user. */
