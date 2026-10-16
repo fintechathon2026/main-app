@@ -298,7 +298,13 @@ export async function buildSummary(d: ViewDeps, period: string): Promise<Summary
   ]);
   const base = ctx.baseCurrency;
   const inBase = txs.filter((t) => t.currency === base);
-  const prevOut = inBase.filter((t) => t.amount < 0 && t.posted_at.slice(0, 10) >= prev.from && t.posted_at.slice(0, 10) < from);
+  // For the current month, compare with the same days of last month, not the whole month.
+  const day = today(d);
+  const monthToDate = day >= from && day < toExclusive;
+  const prevEnd = monthToDate ? addDays(prev.from, daysBetween(from, day) + 1) : from;
+  const prevOut = inBase.filter(
+    (t) => t.amount < 0 && t.posted_at.slice(0, 10) >= prev.from && t.posted_at.slice(0, 10) < (prevEnd < from ? prevEnd : from),
+  );
   return computeSummary({
     period,
     baseCurrency: base,
@@ -306,6 +312,7 @@ export async function buildSummary(d: ViewDeps, period: string): Promise<Summary
     balance: accounts.filter((a) => a.currency === base).reduce((a, x) => a + x.balance, 0),
     transactions: inBase.map((t) => ({ id: t.id, date: t.posted_at, amountBase: t.amount, category: t.category })),
     previousPeriodSpending: prevOut.length ? prevOut.reduce((a, t) => a - t.amount, 0) : null,
+    previousComparison: monthToDate ? "month_to_date" : "full_month",
     bills: bills.map((b) => ({ id: b.id, title: b.biller_name ?? b.biller_id, dueDate: b.due_date, amount: b.amount, status: b.status })),
     subscriptions: ctx.subs.map((s) => ({
       id: s.row.id,

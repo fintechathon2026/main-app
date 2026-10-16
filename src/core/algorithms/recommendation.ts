@@ -103,7 +103,7 @@ export function scoreSubscription(s: RecSubscription, ctx: RecContext): RecScore
     signals.push({
       key: "low_usage",
       points: REC_WEIGHTS.low_usage,
-      detail: `Used ${s.usage.sessionsPerMonth} times per month (below ${t.lowUsageSessionsPerMonth}).`,
+      detail: `Used ${s.usage.sessionsPerMonth} time${s.usage.sessionsPerMonth === 1 ? "" : "s"} per month (below ${t.lowUsageSessionsPerMonth}).`,
       source: s.usage.source,
     });
   }

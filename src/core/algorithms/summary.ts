@@ -36,6 +36,8 @@ export type SummaryInput = {
   balance: number;
   transactions: readonly SummaryTx[]; // any range; filtered to the period here
   previousPeriodSpending?: number | null;
+  /** "month_to_date": the previous figure covers the same days of last month (current period). */
+  previousComparison?: "full_month" | "month_to_date";
   bills: readonly SummaryBill[];
   subscriptions: readonly SummarySubscription[];
   prepaidSessions?: readonly SummaryPrepaidSession[];
@@ -181,7 +183,7 @@ export function computeSummary(input: SummaryInput): SummaryResult {
     const pct = Math.round((change / input.previousPeriodSpending) * 100);
     insights.push({
       key: "month_over_month",
-      text: `Spending is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct)}% versus last month (${fmt(money(Math.abs(change)))}).`,
+      text: `Spending is ${pct >= 0 ? "up" : "down"} ${Math.abs(pct)}% versus ${input.previousComparison === "month_to_date" ? "the same days last month" : "last month"} (${fmt(money(Math.abs(change)))}).`,
       amount: money(change),
       refIds: txs.filter((t) => t.amountBase < 0).map((t) => t.id),
     });
