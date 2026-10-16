@@ -44,7 +44,7 @@ describe("R1 read routes (database mode, fake repos)", () => {
     const res = await summary(req("/api/summary?period=2026-10"));
     expect(res.status).toBe(200);
     const body = S.SummaryResponse.parse(await res.json());
-    expect(body.balanceAfterObligations.amount).toBe(5889);
+    expect(body.balanceAfterObligations.amount).toBe(5891);
     const def = S.SummaryResponse.parse(await (await summary(req("/api/summary"))).json());
     expect(def.period).toBe("2026-10");
   });
@@ -52,16 +52,16 @@ describe("R1 read routes (database mode, fake repos)", () => {
   it("GET /api/subscriptions filters by status", async () => {
     expect((await subscriptions(req("/api/subscriptions?status=bogus"))).status).toBe(400);
     const body = S.SubscriptionsResponse.parse(await (await subscriptions(req("/api/subscriptions?status=trial"))).json());
-    expect(body.items.map((i) => i.id)).toEqual([SUB.tencent]);
+    expect(body.items.map((i) => i.id)).toEqual([SUB.keep]);
   });
 
   it("POST /api/subscriptions/:id/keep: owner only, trials only", async () => {
-    const ok = await keep(req(`/api/subscriptions/${SUB.tencent}/keep`, LIN, "POST"), params({ id: SUB.tencent }));
+    const ok = await keep(req(`/api/subscriptions/${SUB.keep}/keep`, LIN, "POST"), params({ id: SUB.keep }));
     expect(ok.status).toBe(200);
-    expect(S.KeepTrialResponse.parse(await ok.json())).toEqual({ subscriptionId: SUB.tencent, keepFlag: true });
+    expect(S.KeepTrialResponse.parse(await ok.json())).toEqual({ subscriptionId: SUB.keep, keepFlag: true });
     const paid = await keep(req(`/api/subscriptions/${SUB.iqiyi}/keep`, LIN, "POST"), params({ id: SUB.iqiyi }));
     expect(paid.status).toBe(409);
-    const foreign = await keep(req(`/api/subscriptions/${SUB.tencent}/keep`, OTHER_USER, "POST"), params({ id: SUB.tencent }));
+    const foreign = await keep(req(`/api/subscriptions/${SUB.keep}/keep`, OTHER_USER, "POST"), params({ id: SUB.keep }));
     expect(foreign.status).toBe(404);
     // After keeping, the trial no longer has an auto-cancel date.
     const subs = S.SubscriptionsResponse.parse(await (await subscriptions(req("/api/subscriptions?status=trial"))).json());

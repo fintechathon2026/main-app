@@ -2,7 +2,7 @@
   "baseCurrency": "CNY",
   "plans": [
     {
-      "id": "00000004-0000-4000-8000-000000000001",
+      "id": "9a000000-0000-4000-8000-000000000001",
       "chainPlanId": "1",
       "merchant": {
         "id": "FITBOX_FUTIAN",

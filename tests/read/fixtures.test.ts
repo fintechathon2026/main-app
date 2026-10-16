@@ -25,7 +25,7 @@ async function generate(): Promise<Record<string, unknown>> {
     "summary.json": await buildSummary(d, "2026-10"),
     "subscriptions.json": await buildSubscriptions(d),
     "recommendations.json": await buildRecommendations(d),
-    "subscriptions-keep.json": { subscriptionId: SUB.tencent, keepFlag: true },
+    "subscriptions-keep.json": { subscriptionId: SUB.keep, keepFlag: true },
     "prepaid-plans.json": await buildPrepaidPlans(d),
     "prepaid-offers.json": await buildPrepaidOffers(d),
     "prepaid-offer-advice.json": (await buildAdvice(d, OFFER.fitbox))!.advice,

@@ -63,11 +63,11 @@ describe("read tools over Lin's data", () => {
   });
 
   it("list_bills labels document bills as document", async () => {
-    const r = (await (await tools()).list_bills.run({ status: "pending" }, ctx)) as Labeled<{ billerId: string }>[];
+    const r = (await (await tools()).list_bills.run({ status: "unpaid" }, ctx)) as Labeled<{ billerId: string }>[];
     expect(r.map((b) => [b.value.billerId, b.origin])).toEqual([
       ["CHINA_MOBILE", "mock_bank"],
       ["SZ_POWER", "document"],
-      ["RENT_FUTIAN", "mock_bank"],
+      ["LANDLORD_WANG", "mock_bank"],
     ]);
     expect(JSON.stringify(r)).not.toContain("payee_account_ref");
   });
@@ -95,7 +95,7 @@ describe("read tools over Lin's data", () => {
 
   it("list_recommendations lists cited signals", async () => {
     const r = (await (await tools()).list_recommendations.run({}, ctx)) as Labeled<{ signals: unknown[]; score: number }>[];
-    expect(r[0].value.score).toBe(5);
+    expect(r[0].value.score).toBe(8);
     expect(r.every((x) => x.value.signals.length > 0)).toBe(true);
   });
 

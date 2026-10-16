@@ -56,11 +56,11 @@ describe("read repositories parse pg rows", () => {
     await expect(listTransactions(q, U, { from: "2026-10-01", to: "2026-10-31" })).rejects.toThrow(/failed validation/);
   });
 
-  it("bills: origin derives from document_id; payee ref is never selected", async () => {
-    const q = fake([{ id: "b1", biller_id: "SZ_POWER", biller_name: "Shenzhen Power", amount: "186", due_date: "2026-10-22", period: "2026-10", document_id: null, status: "pending", created_at: null }]);
+  it("bills: origin from amount_origin; payee ref is never selected", async () => {
+    const q = fake([{ id: "b1", biller_id: "SZ_POWER", biller_name: "State Grid Shenzhen", amount: "186", currency: "CNY", amount_origin: "mock_bank", due_date: "2026-10-22", period: "2026-10", document_id: null, status: "pending", created_at: null }]);
     const rows = await listBills(q, U, "pending");
     expect(billOrigin(rows[0])).toBe("mock_bank");
-    expect(billOrigin({ document_id: "d1" })).toBe("document");
+    expect(billOrigin({ amount_origin: "document" })).toBe("document");
     expect(q.calls[0].text).not.toContain("payee_account_ref");
   });
 
@@ -86,7 +86,7 @@ describe("read repositories parse pg rows", () => {
       U,
     );
     expect(s).toMatchObject({ baseCurrency: "CNY", mandateVersion: 3, autoCancelTrials: { enabled: true, daysBeforeCharge: 1 } });
-    const d = await getUserSettings(fake([], [{ currency: "IDR" }]), U);
+    const d = await getUserSettings(fake([], [{ base_currency: "IDR" }]), U);
     expect(d).toMatchObject({ baseCurrency: "IDR", mandateVersion: null, autoCancelTrials: null, anomaly: { k: 3.5, minHistory: 3 } });
   });
 

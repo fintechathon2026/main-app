@@ -14,34 +14,36 @@ import type { SubscriptionRow, UsageSignalRow } from "@/src/server/db/read/subsc
 import type { TransactionRow } from "@/src/server/db/read/transactions";
 import { scoreRecommendations } from "@/src/server/db/read/views";
 
-export const LIN = "8b3c6f1e-2a4d-4c5e-9f70-1a2b3c4d5e6f";
+export const LIN = "11111111-1111-4111-8111-111111111111"; // same id as supabase/seed.sql
 export const OTHER_USER = "00000000-0000-4000-8000-0000000000ff";
 export const NOW = "2026-10-17T09:00:00.000Z";
 
-const uid = (group: number, n: number) => `${String(group).padStart(8, "0")}-0000-4000-8000-${String(n).padStart(12, "0")}`;
+// Id prefixes follow supabase/seed.sql (merchants c0…, subscriptions 5b…, plans 9a…, offers 0f…).
+const PREFIX: Record<number, string> = { 1: "c0000000", 2: "5b000000", 3: "7c000000", 4: "9a000000", 5: "0f000000", 6: "b1000000", 7: "d0c00000", 8: "e1000000", 9: "a0000000" };
+const uid = (group: number, n: number) => `${PREFIX[group]}-0000-4000-8000-${n.toString(16).padStart(12, "0")}`;
 export const hash = (n: number) => `0x${"5e1f7a2c".repeat(7).slice(0, 56)}${n.toString(16).padStart(8, "0")}`;
 
 export const SUB = {
   gpt: uid(2, 1),
   iqiyi: uid(2, 2),
   netease: uid(2, 3),
-  tencent: uid(2, 4),
+  keep: uid(2, 4),
 };
 export const PLAN_ID = uid(4, 1);
-export const OFFER = { fitbox: uid(5, 1), ironpeak: uid(5, 2) };
+export const OFFER = { fitbox: uid(5, 1), ironpulse: uid(5, 2) };
 
 const M = {
-  gpt: { id: uid(1, 1), name: "ChatGPT Plus", category: "software" },
-  iqiyi: { id: uid(1, 2), name: "iQIYI", category: "video" },
-  netease: { id: uid(1, 3), name: "NetEase Cloud Music", category: "music" },
-  tencent: { id: uid(1, 4), name: "Tencent Video", category: "video" },
-  rent: { id: uid(1, 5), name: "Futian Apartments", category: "housing" },
-  power: { id: uid(1, 6), name: "Shenzhen Power", category: "utilities" },
-  mobile: { id: uid(1, 7), name: "China Mobile", category: "telecom" },
-  meituan: { id: uid(1, 8), name: "Meituan", category: "food" },
-  metro: { id: uid(1, 9), name: "Shenzhen Metro", category: "transport" },
-  taobao: { id: uid(1, 10), name: "Taobao", category: "shopping" },
-  payroll: { id: uid(1, 11), name: "Payroll", category: "income" },
+  power: { id: uid(1, 1), name: "State Grid Shenzhen", category: "utilities" },
+  mobile: { id: uid(1, 2), name: "China Mobile", category: "telecom" },
+  rent: { id: uid(1, 3), name: "Landlord Wang", category: "housing" },
+  gpt: { id: uid(1, 4), name: "ChatGPT Plus", category: "software" },
+  iqiyi: { id: uid(1, 5), name: "iQIYI", category: "entertainment" },
+  netease: { id: uid(1, 6), name: "NetEase Cloud Music", category: "entertainment" },
+  keep: { id: uid(1, 7), name: "Keep Premium", category: "fitness" },
+  meituan: { id: uid(1, 11), name: "Meituan", category: "food_delivery" },
+  metro: { id: uid(1, 12), name: "Shenzhen Metro", category: "transport" },
+  taobao: { id: uid(1, 13), name: "Taobao", category: "shopping" },
+  payroll: { id: uid(1, 14), name: "Payroll", category: "income" },
 };
 
 let txN = 0;
@@ -177,50 +179,43 @@ export const subscriptions: SubscriptionRow[] = [
   },
   {
     ...subBase,
-    id: SUB.tencent,
-    merchant_id: M.tencent.id,
-    merchant_name: M.tencent.name,
-    category: M.tencent.category,
-    amount: 30,
+    id: SUB.keep,
+    merchant_id: M.keep.id,
+    merchant_name: M.keep.name,
+    category: M.keep.category,
+    amount: 28,
     status: "trial",
-    first_seen: "2026-09-21",
+    first_seen: "2026-10-12",
     last_charged: null,
     confidence: 1,
-    trial_end: "2026-10-21T00:00:00.000Z",
+    trial_end: "2026-10-19T09:00:00.000Z",
     trial_status_origin: "mock_bank",
   },
 ];
 
+const usage = (sub: string, m: { id: string }, value: number): UsageSignalRow => ({
+  subscription_id: sub,
+  merchant_id: m.id,
+  source: "mock_bank",
+  metric: "sessions_per_month",
+  value,
+  period_start: "2026-09-17",
+  period_end: "2026-10-17",
+  origin: "simulated",
+  simulated: true,
+});
 export const usageSignals: UsageSignalRow[] = [
-  {
-    subscription_id: SUB.netease,
-    merchant_id: M.netease.id,
-    source: "sim:netease-usage-2026-10",
-    metric: "sessions",
-    value: 1,
-    period_start: "2026-09-17",
-    period_end: "2026-10-16",
-    origin: "simulated",
-    simulated: true,
-  },
-  {
-    subscription_id: SUB.netease,
-    merchant_id: M.netease.id,
-    source: "sim:netease-usage-2026-10",
-    metric: "last_used",
-    value: null,
-    period_start: null,
-    period_end: "2026-10-02",
-    origin: "simulated",
-    simulated: true,
-  },
+  usage(SUB.iqiyi, M.iqiyi, 1),
+  usage(SUB.netease, M.netease, 22),
+  usage(SUB.gpt, M.gpt, 35),
+  { ...usage(SUB.iqiyi, M.iqiyi, 0), metric: "last_used", value: 0, period_start: "2026-10-02", period_end: "2026-10-02" },
 ];
 
 export const bills: BillRow[] = [
-  { id: uid(6, 1), biller_id: "SZ_POWER", biller_name: "Shenzhen Power", amount: 174, due_date: "2026-10-02", period: "2026-09", document_id: null, status: "paid", created_at: null },
-  { id: uid(6, 2), biller_id: "CHINA_MOBILE", biller_name: "China Mobile", amount: 88, due_date: "2026-10-20", period: "2026-10", document_id: null, status: "pending", created_at: null },
-  { id: uid(6, 3), biller_id: "SZ_POWER", biller_name: "Shenzhen Power", amount: 186, due_date: "2026-10-22", period: "2026-10", document_id: uid(7, 1), status: "pending", created_at: null },
-  { id: uid(6, 4), biller_id: "RENT_FUTIAN", biller_name: "Futian Apartments", amount: 3500, due_date: "2026-10-28", period: "2026-11", document_id: null, status: "pending", created_at: null },
+  { id: uid(6, 1), biller_id: "SZ_POWER", biller_name: "State Grid Shenzhen", amount: 174, currency: "CNY", amount_origin: "mock_bank", due_date: "2026-10-02", period: "2026-09", document_id: null, status: "paid", created_at: null },
+  { id: uid(6, 2), biller_id: "CHINA_MOBILE", biller_name: "China Mobile", amount: 88, currency: "CNY", amount_origin: "mock_bank", due_date: "2026-10-20", period: "2026-10", document_id: null, status: "unpaid", created_at: null },
+  { id: uid(6, 3), biller_id: "SZ_POWER", biller_name: "State Grid Shenzhen", amount: 186, currency: "CNY", amount_origin: "document", due_date: "2026-10-22", period: "2026-10", document_id: uid(7, 1), status: "unpaid", created_at: null },
+  { id: uid(6, 4), biller_id: "LANDLORD_WANG", biller_name: "Landlord Wang", amount: 3500, currency: "CNY", amount_origin: "mock_bank", due_date: "2026-10-28", period: "2026-11", document_id: null, status: "unpaid", created_at: null },
 ];
 
 export const accounts: AccountRow[] = [
@@ -255,7 +250,7 @@ export const prepaidPlans: PrepaidPlanRow[] = [
     units_total: 60,
     units_redeemed: 12,
     cancel_fee_bps: 1000,
-    agent_address: "0x4a6e00000000000000000000000000000000a9e7",
+    agent_address: "0xa9e7000000000000000000000000000000000a9e",
     status: "active",
     purchase_tx: hash(1),
     origin: "chain",
@@ -280,20 +275,22 @@ export const offers: PrepaidOfferRow[] = [
     unit_price: 10000,
     units: 60,
     cancel_fee_bps: 1000,
+    pay_per_visit_price: 12500,
     expires_at: "2026-10-31T15:59:59.000Z",
     offer_json: { merchantName: "FitBox Futian", payPerVisitPrice: 12500, currency: "CNY" },
   },
   {
-    id: OFFER.ironpeak,
-    merchant_id: "IRONPEAK_NANSHAN",
-    merchant_name: "IronPeak Nanshan",
+    id: OFFER.ironpulse,
+    merchant_id: "IRONPULSE_NANSHAN",
+    merchant_name: "IronPulse Nanshan",
     escrow_supported: false,
-    merchant_risk_level: "none",
-    unit_price: 9000,
-    units: 40,
-    cancel_fee_bps: 2000,
+    merchant_risk_level: "watch",
+    unit_price: 8000,
+    units: 50,
+    cancel_fee_bps: 1500,
+    pay_per_visit_price: 10000,
     expires_at: "2026-10-31T15:59:59.000Z",
-    offer_json: { merchantName: "IronPeak Nanshan", payPerVisitPrice: 11000, currency: "CNY" },
+    offer_json: { merchantName: "IronPulse Nanshan", payPerVisitPrice: 10000, currency: "CNY" },
   },
 ];
 

@@ -21,7 +21,7 @@ describe("buildSubscriptions (Lin)", () => {
     expect(gpt.amount).toEqual({ amount: 20, currency: "USD", base: { amount: 142, currency: "CNY", rate: 7.12, rateDate: "2026-10-16" } });
     expect(gpt.annualCost).toEqual({ amount: 1709, currency: "CNY" });
     expect(gpt.priceChange).toBeNull();
-    expect(gpt.usage).toBeNull();
+    expect(gpt.usage?.sessionsPerMonth).toBe(35);
   });
 
   it("derives iQIYI's price change from transactions", async () => {
@@ -33,10 +33,10 @@ describe("buildSubscriptions (Lin)", () => {
 
   it("labels simulated usage and computes the trial auto-cancel date", async () => {
     const r = await buildSubscriptions(d());
-    const ne = r.items.find((i) => i.id === SUB.netease)!;
-    expect(ne.usage).toEqual({ lastUsedAt: "2026-10-02", sessionsPerMonth: 1, source: { origin: "simulated", sourceId: "sim:netease-usage-2026-10", simulated: true } });
-    const tv = r.items.find((i) => i.id === SUB.tencent)!;
-    expect(tv.trial).toEqual({ endsAt: "2026-10-21", autoCancelAt: "2026-10-20", keepFlag: false, origin: "mock_bank" });
+    const iq = r.items.find((i) => i.id === SUB.iqiyi)!;
+    expect(iq.usage).toEqual({ lastUsedAt: "2026-10-02", sessionsPerMonth: 1, source: { origin: "simulated", sourceId: "mock_bank", simulated: true } });
+    const trial = r.items.find((i) => i.id === SUB.keep)!;
+    expect(trial.trial).toEqual({ endsAt: "2026-10-19", autoCancelAt: "2026-10-18", keepFlag: false, origin: "mock_bank" });
   });
 
   it("returns nothing for another user", async () => {
@@ -49,37 +49,36 @@ describe("buildSummary (Lin, October)", () => {
     const s = await buildSummary(d(), "2026-10");
     expect(s.income.amount).toBe(12000);
     expect(s.spending.amount).toBe(992);
-    expect(s.byCategory[0]).toMatchObject({ category: "food", amount: { amount: 420 } });
+    expect(s.byCategory[0]).toMatchObject({ category: "food_delivery", amount: { amount: 420 } });
     expect(s.recurring).toEqual({ bills: { amount: 3948, currency: "CNY" }, subscriptions: { amount: 187, currency: "CNY" } });
     expect(s.upcoming14d.map((u) => [u.kind, u.title, u.amount.amount])).toEqual([
+      ["trial_conversion", "Keep Premium", 28],
       ["bill", "China Mobile", 88],
-      ["trial_conversion", "Tencent Video", 30],
-      ["bill", "Shenzhen Power", 186],
+      ["bill", "State Grid Shenzhen", 186],
       ["renewal", "ChatGPT Plus", 20],
-      ["bill", "Futian Apartments", 3500],
+      ["bill", "Landlord Wang", 3500],
       ["renewal", "NetEase Cloud Music", 15],
     ]);
     expect(s.balance.amount).toBe(9850);
-    expect(s.balanceAfterObligations.amount).toBe(9850 - 88 - 30 - 186 - 142 - 3500 - 15);
+    expect(s.balanceAfterObligations.amount).toBe(9850 - 28 - 88 - 186 - 142 - 3500 - 15);
   });
 });
 
 describe("recommendations (Lin)", () => {
-  it("scores iQIYI highest, NetEase low usage from simulated data, ChatGPT FX cost", async () => {
+  it("scores iQIYI highest (duplicate, price increase, simulated low usage), ChatGPT FX cost", async () => {
     const { ranked } = await scoreRecommendations(d());
     expect(ranked.map((r) => [r.subscriptionId, r.score, r.signals.map((s) => s.key)])).toEqual([
-      [SUB.iqiyi, 5, ["duplicate", "price_increase"]],
-      [SUB.netease, 3, ["low_usage"]],
-      [SUB.tencent, 3, ["duplicate"]],
+      [SUB.iqiyi, 8, ["duplicate", "price_increase", "low_usage"]],
+      [SUB.netease, 3, ["duplicate"]],
       [SUB.gpt, 1, ["fx_cost_high"]],
     ]);
-    expect(ranked[1].signals[0].source.simulated).toBe(true);
+    expect(ranked[0].signals[2].source.simulated).toBe(true);
   });
 
   it("serves stored rows with live annual savings", async () => {
     const rows = await linRecommendationRows();
     const r = await buildRecommendations(d(linRepos(rows)));
-    expect(r.items[0]).toMatchObject({ subscriptionId: SUB.iqiyi, score: 5, annualSavings: { amount: 360, currency: "CNY" }, status: "open" });
+    expect(r.items[0]).toMatchObject({ subscriptionId: SUB.iqiyi, score: 8, annualSavings: { amount: 360, currency: "CNY" }, status: "open" });
     expect(r.items.every((i) => i.signals.length > 0)).toBe(true);
   });
 });
@@ -116,7 +115,7 @@ describe("prepaid views (Lin)", () => {
     const r = await buildPrepaidOffers(d());
     expect(r.offers.map((o) => [o.merchant.name, o.total.amount, o.payPerVisitPrice.amount, o.merchant.escrowSupported])).toEqual([
       ["FitBox Futian", 6000, 125, true],
-      ["IronPeak Nanshan", 3600, 110, false],
+      ["IronPulse Nanshan", 4000, 100, false],
     ]);
   });
 

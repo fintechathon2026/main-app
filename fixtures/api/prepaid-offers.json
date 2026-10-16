@@ -1,7 +1,7 @@
 {
   "offers": [
     {
-      "id": "00000005-0000-4000-8000-000000000001",
+      "id": "0f000000-0000-4000-8000-000000000001",
       "merchant": {
         "id": "FITBOX_FUTIAN",
         "name": "FitBox Futian",
@@ -40,27 +40,27 @@
       "simulated": true
     },
     {
-      "id": "00000005-0000-4000-8000-000000000002",
+      "id": "0f000000-0000-4000-8000-000000000002",
       "merchant": {
-        "id": "IRONPEAK_NANSHAN",
-        "name": "IronPeak Nanshan",
+        "id": "IRONPULSE_NANSHAN",
+        "name": "IronPulse Nanshan",
         "escrowSupported": false,
-        "riskLevel": "none"
+        "riskLevel": "watch"
       },
       "unitPrice": {
-        "amount": 90,
+        "amount": 80,
         "currency": "CNY"
       },
-      "units": 40,
+      "units": 50,
       "total": {
-        "amount": 3600,
+        "amount": 4000,
         "currency": "CNY"
       },
       "payPerVisitPrice": {
-        "amount": 110,
+        "amount": 100,
         "currency": "CNY"
       },
-      "cancelFeeBps": 2000,
+      "cancelFeeBps": 1500,
       "expiresAt": "2026-10-31T15:59:59.000Z",
       "signals": [],
       "simulated": true
