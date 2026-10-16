@@ -44,3 +44,6 @@ next-env.d.ts
 # local tooling
 .claude/*
 .codegraph/
+
+# local document storage (dev)
+/.data/
