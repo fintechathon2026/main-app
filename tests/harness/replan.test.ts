@@ -71,7 +71,7 @@ describe.skipIf(!DB_ENABLED)("harness: re-plan after a mandate change (H9)", () 
     );
   }
 
-  it("re-plans into new action rows and a fresh approval", async () => {
+  it("re-plans into new action rows and a fresh approval, then pays once", async () => {
     const p = await pausedBillPlan(admin, env, subjects);
     await activateV4(p.user.id);
     await decideApproval(p.user.id, p.flow.approvalId!, "approve");
@@ -88,6 +88,8 @@ describe.skipIf(!DB_ENABLED)("harness: re-plan after a mandate change (H9)", () 
       [0, "cancelled_replan"],
       [1, "awaiting_approval"],
     ]);
+    // The re-planned action is bound to the mandate it will be judged against.
+    expect(actions.rows[1].mandate_version).toBe(4);
 
     const approvals = await admin.query(
       "select action_id, status from public.approvals where action_id = any($1::uuid[]) order by created_at",
@@ -98,5 +100,11 @@ describe.skipIf(!DB_ENABLED)("harness: re-plan after a mandate change (H9)", () 
       { action_id: actions.rows[1].id, status: "pending" },
     ]);
     expect(await paymentsFor(admin, p.billId)).toEqual([]);
+
+    const fresh = await admin.query("select id from public.approvals where action_id = $1", [actions.rows[1].id]);
+    await decideApproval(p.user.id, fresh.rows[0].id, "approve");
+    const done = await resumePlan({ planId: p.flow.planId, userId: p.user.id }, env);
+    expect(done.status).toBe("done");
+    expect(await paymentsFor(admin, p.billId)).toHaveLength(1);
   });
 });

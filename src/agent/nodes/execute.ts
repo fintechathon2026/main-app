@@ -10,15 +10,21 @@ import { getDeps } from "./graph-state";
 export const MAX_REPLANS = 1;
 
 export const execute: NodeFn = async (state, config) => {
-  const { executor } = getDeps(config);
+  const { executor, store } = getDeps(config);
   const execResults: ExecResult[] = [];
   // Sequential on purpose: per-user cap reservations are serialized by the executor anyway.
   for (const id of state.actionIds) execResults.push(await executor.run(id, state.userId));
 
   const replan = execResults.some((r) => r.replan) && state.replanCount < MAX_REPLANS;
   if (replan) {
+    // The mandate changed (that is what triggers a re-plan): new proposals must be bound to the
+    // mandate now in force, or the executor would cancel them again for the same reason.
+    const ctx = await store.loadContext(state.userId);
     return {
       execResults,
+      mandateVersion: ctx.mandateVersion,
+      mandateHash: ctx.mandateHash,
+      killSwitch: ctx.killSwitch,
       replanRequested: true,
       replanCount: state.replanCount + 1,
       approvalId: null,
