@@ -14,6 +14,8 @@ Conventional Commits: `type(scope): message`
 - Breaking change: add `!` after the scope (`feat(mandate)!: ...`) and explain it in the body.
 - Body (optional): explain why, not what. Wrap at 72 characters.
 - One logical change per commit. Do not mix unrelated files.
+- Commit after every small change. Do not batch work into large commits.
+- Never `git push` unless the user explicitly says to push.
 - **Do not add `Co-Authored-By` or any other attribution trailer.**
 - Never commit secrets, `.env*` files, private keys or real personal data.
 
