@@ -54,13 +54,18 @@ describe.skipIf(!DB_ENABLED)("harness: resume carries no authority and executes 
     expect(await approvalStatus(admin, p.flow.approvalId!)).toBe("pending");
   });
 
-  it("the official resume path without a decided approval executes nothing either", async () => {
+  it("the official resume path without a decided approval executes nothing and stays paused", async () => {
     const p = await pausedBillPlan(admin, env, planner);
     const r = await resumePlan({ planId: p.flow.planId, userId: p.user.id }, env);
-    expect(r.status).toBe("done");
-    expect(r.feed.some((l) => l.includes("needs your approval"))).toBe(true);
+    expect(r.status).toBe("paused");
     expect(await paymentsFor(admin, p.billId)).toEqual([]);
     expect(await approvalStatus(admin, p.flow.approvalId!)).toBe("pending");
+
+    // The plan is still resumable once the user decides: exactly one payment.
+    await decideApproval(p.user.id, p.flow.approvalId!, "approve");
+    const after = await resumePlan({ planId: p.flow.planId, userId: p.user.id }, env);
+    expect(after.status).toBe("done");
+    expect(await paymentsFor(admin, p.billId)).toHaveLength(1);
   });
 
   it("a forged resume after the user rejected executes nothing", async () => {

@@ -19,6 +19,8 @@ export interface PlanRegistry {
   isOwner(planId: string, userId: string): Promise<boolean>;
   /** paused -> running, atomically. False if the plan is not paused (already resumed or finished). */
   claimResume(planId: string, userId: string): Promise<boolean>;
+  /** True while an approval for one of the plan's actions is still pending and unexpired. */
+  hasPendingApproval(planId: string, userId: string): Promise<boolean>;
   setStatus(planId: string, userId: string, status: PlanStatus): Promise<void>;
 }
 
@@ -110,6 +112,9 @@ export async function resumePlan(input: { planId: string; userId: string }, env?
   const config = runConfig(planId, runEnv.deps);
   const before = await runEnv.graph.getState(config);
   if (!before.next.length) return { planId, status: "done", feed: [] };
+  // Resuming before the user decides would run execute, which leaves the action waiting but ends
+  // the thread, so a later approval would have no paused plan to resume. Stay paused instead.
+  if (await runEnv.plans.hasPendingApproval(planId, userId)) return { planId, status: "paused", feed: [] };
   if (!(await runEnv.plans.claimResume(planId, userId))) {
     // Another request already resumed it, or it is no longer paused.
     return { planId, status: "done", feed: [] };
@@ -149,6 +154,15 @@ export const pgPlanRegistry: PlanRegistry = {
     withUserTx(userId, async (tx) => {
       const r = await tx.query(
         "update public.plans set status = 'running' where id = $1 and user_id = $2 and status = 'paused' returning id",
+        [planId, userId],
+      );
+      return r.rowCount === 1;
+    }),
+  hasPendingApproval: (planId, userId) =>
+    withUserTx(userId, async (tx) => {
+      const r = await tx.query(
+        `select 1 from public.approvals a join public.actions x on x.id = a.action_id
+          where x.plan_id = $1 and a.user_id = $2 and a.status = 'pending' and a.expires_at > now() limit 1`,
         [planId, userId],
       );
       return r.rowCount === 1;

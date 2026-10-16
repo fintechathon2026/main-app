@@ -25,6 +25,9 @@ class MemoryPlans implements PlanRegistry {
   async claimResume() {
     return false;
   }
+  async hasPendingApproval() {
+    return false;
+  }
   async setStatus(planId: string, _userId: string, status: PlanStatus) {
     const r = this.rows.get(planId);
     if (r) r.status = status;

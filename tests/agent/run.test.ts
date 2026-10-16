@@ -21,6 +21,10 @@ class MemoryPlans implements PlanRegistry {
     r.status = "running";
     return true;
   }
+  pending = new Set<string>();
+  async hasPendingApproval(planId: string) {
+    return this.pending.has(planId);
+  }
   async setStatus(planId: string, userId: string, status: PlanStatus) {
     const r = this.rows.get(planId);
     if (r && r.userId === userId) r.status = status;
