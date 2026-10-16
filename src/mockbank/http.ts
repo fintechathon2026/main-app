@@ -1,0 +1,153 @@
+// Owner: R3 (roles.md). Minimal version by R1; extend, don't duplicate.
+// HTTP surface of the mock bank (PRD §14.1), mounted at /mockbank/* by
+// app/mockbank/[...path]/route.ts. Auth: `x-api-key: $MOCKBANK_API_KEY`. Customer-scoped
+// routes need `x-customer-id` (the bank customer = the app user id). Every call is logged to
+// mockbank.call_log with request, response and latency.
+
+import { timingSafeEqual } from "node:crypto";
+import {
+  MockbankError,
+  cancelSubscription,
+  createPayment,
+  escrowExit,
+  getEscrowPlan,
+  injectBill,
+  injectTransaction,
+  listAccounts,
+  listBillers,
+  listBills,
+  listEvents,
+  listSubscriptions,
+  listTransactions,
+  logCall,
+  lookupOperation,
+  type MbResponse,
+} from "./bank";
+import { scenarios } from "./scenarios";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function apiKeyOk(req: Request): boolean {
+  const expected = process.env.MOCKBANK_API_KEY;
+  if (!expected) return false;
+  const got = req.headers.get("x-api-key") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
+  const a = Buffer.from(got);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function testRoutesEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" || process.env.MOCKBANK_ENABLE_TEST_ROUTES === "1";
+}
+
+function customer(req: Request): string {
+  const c = req.headers.get("x-customer-id") ?? "";
+  if (!UUID_RE.test(c)) throw new MockbankError(400, "customer_id_required");
+  return c;
+}
+
+const ok = (body: unknown, status = 200): MbResponse => ({ status, body });
+
+async function route(req: Request, path: string[], body: Record<string, unknown> | undefined): Promise<MbResponse> {
+  const url = new URL(req.url);
+  const q = (k: string) => url.searchParams.get(k) ?? undefined;
+  const m = req.method;
+  const [p0, p1, p2, p3] = path;
+  const idemKey = (req.headers.get("idempotency-key") ?? (body?.idempotency_key as string | undefined) ?? "").trim();
+
+  if (m === "GET" && p0 === "accounts" && path.length === 1) return ok({ accounts: await listAccounts(customer(req)) });
+  if (m === "GET" && p0 === "accounts" && p2 === "transactions" && path.length === 3) {
+    if (!UUID_RE.test(p1)) throw new MockbankError(404, "account_not_found");
+    return ok({ transactions: await listTransactions(customer(req), p1, q("from"), q("to")) });
+  }
+  if (m === "GET" && p0 === "billers" && path.length === 1) return ok({ billers: await listBillers() });
+  if (m === "GET" && p0 === "bills" && path.length === 1) return ok({ bills: await listBills(customer(req), q("status")) });
+  if (m === "POST" && p0 === "payments" && path.length === 1) {
+    return createPayment(customer(req), {
+      bill_id: String(body?.bill_id ?? ""),
+      biller_id: String(body?.biller_id ?? ""),
+      amount: Number(body?.amount),
+      idempotency_key: idemKey,
+    });
+  }
+  if (m === "GET" && p0 === "operations" && path.length === 2) {
+    const r = await lookupOperation(decodeURIComponent(p1));
+    if (!r) throw new MockbankError(404, "operation_not_found");
+    return ok({ status_code: r.status, response: r.body });
+  }
+  if (m === "GET" && p0 === "subscriptions" && path.length === 1) return ok({ subscriptions: await listSubscriptions(customer(req)) });
+  if (m === "POST" && p0 === "subscriptions" && p2 === "cancel" && path.length === 3) {
+    if (!UUID_RE.test(p1)) throw new MockbankError(404, "subscription_not_found");
+    return cancelSubscription(customer(req), p1, idemKey);
+  }
+  if (m === "GET" && p0 === "events" && path.length === 1) {
+    const since = Number(q("since") ?? 0);
+    return ok({ events: await listEvents(customer(req), Number.isFinite(since) ? since : 0) });
+  }
+  if (p0 === "escrow" && p1 === "plans" && /^\d+$/.test(p2 ?? "")) {
+    if (m === "GET" && path.length === 3) return ok({ plan: await getEscrowPlan(p2) });
+    if (m === "POST" && path.length === 4 && (p3 === "exit-attested" || p3 === "exit-voluntary")) {
+      return escrowExit(p2, p3 === "exit-attested" ? "attested" : "voluntary", String(body?.caller ?? ""), idemKey);
+    }
+  }
+  if (p0 === "test") {
+    if (!testRoutesEnabled()) throw new MockbankError(404, "not_found");
+    if (m === "POST" && p1 === "scenarios" && p2 && path.length === 3) {
+      const s = scenarios[p2];
+      if (!s) throw new MockbankError(404, "unknown_scenario");
+      return ok({ scenario: p2, result: await s.run(customer(req), body ?? {}) }, 201);
+    }
+    if (m === "POST" && p1 === "inject" && path.length === 2) {
+      const c = customer(req);
+      if (body?.kind === "bill") {
+        return ok({ injected: await injectBill(c, body as Parameters<typeof injectBill>[1]) }, 201);
+      }
+      if (body?.kind === "transaction") {
+        return ok({ injected: await injectTransaction(c, body as Parameters<typeof injectTransaction>[1]) }, 201);
+      }
+      throw new MockbankError(400, "unknown_inject_kind");
+    }
+  }
+  throw new MockbankError(404, "not_found");
+}
+
+/** Entry point shared by the route handler and in-process test transports. */
+export async function handleMockbankRequest(req: Request, path: string[]): Promise<Response> {
+  const started = performance.now();
+  const url = new URL(req.url);
+  let body: Record<string, unknown> | undefined;
+  let res: MbResponse;
+  try {
+    if (!process.env.MOCKBANK_API_KEY) throw new MockbankError(503, "mockbank_not_configured");
+    if (!apiKeyOk(req)) throw new MockbankError(401, "invalid_api_key");
+    if (req.method === "POST") {
+      const text = await req.text();
+      if (text) {
+        try {
+          body = JSON.parse(text);
+        } catch {
+          throw new MockbankError(400, "invalid_json");
+        }
+      }
+    }
+    res = await route(req, path, body);
+  } catch (e) {
+    res =
+      e instanceof MockbankError
+        ? { status: e.status, body: { error: e.code, message: e.message } }
+        : { status: 500, body: { error: "internal_error" } };
+    if (!(e instanceof MockbankError)) console.error("mockbank error", e);
+  }
+  if (res.status !== 401 && res.status !== 503) {
+    await logCall({
+      method: req.method,
+      path: "/" + path.join("/"),
+      query: url.search,
+      request: body,
+      status: res.status,
+      response: res.body,
+      latencyMs: performance.now() - started,
+    }).catch((e) => console.error("mockbank call_log failed", e));
+  }
+  return Response.json(res.body, { status: res.status });
+}
