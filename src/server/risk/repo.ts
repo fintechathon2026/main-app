@@ -92,19 +92,32 @@ export function createPgRiskRepo(): RiskRepo {
     async claimExitTrigger({ userId, prepaidPlanId, attestationId, merchantId, kind, simulated }) {
       return withUserTx(userId, async (tx) => {
         await tx.query("select pg_advisory_xact_lock(hashtext('risk:' || $1 || ':' || $2))", [attestationId, prepaidPlanId]);
-        const seen = await tx.query(
-          `select 1 from public.audit_log
-            where user_id = $1 and event_type = 'risk.exit_triggered'
-              and event_json->>'attestationId' = $2 and event_json->>'prepaidPlanId' = $3 limit 1`,
+        // Claimed unless the latest event for this pair is a release.
+        const last = await tx.query<{ event_type: string }>(
+          `select event_type from public.audit_log
+            where user_id = $1 and event_type in ('risk.exit_triggered', 'risk.exit_trigger_released')
+              and event_json->>'attestationId' = $2 and event_json->>'prepaidPlanId' = $3
+            order by seq desc limit 1`,
           [userId, attestationId, prepaidPlanId],
         );
-        if (seen.rowCount) return false;
+        if (last.rows[0]?.event_type === "risk.exit_triggered") return false;
         await appendAudit(tx, userId, {
           actor: "system",
           eventType: "risk.exit_triggered",
           data: { prepaidPlanId, attestationId, merchantId, kind, source: "registry", simulated },
         });
         return true;
+      });
+    },
+
+    async releaseExitTrigger({ userId, prepaidPlanId, attestationId, reason }) {
+      await withUserTx(userId, async (tx) => {
+        await tx.query("select pg_advisory_xact_lock(hashtext('risk:' || $1 || ':' || $2))", [attestationId, prepaidPlanId]);
+        await appendAudit(tx, userId, {
+          actor: "system",
+          eventType: "risk.exit_trigger_released",
+          data: { prepaidPlanId, attestationId, reason },
+        });
       });
     },
 

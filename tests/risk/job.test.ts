@@ -47,6 +47,27 @@ describe("risk job: hard signals (attestations)", () => {
     expect(repo.attestations).toHaveLength(1);
   });
 
+  it("a plan that could not be created releases its trigger, so the next run starts it", async () => {
+    await publish("court_enforcement");
+    const repo = new FakeRiskRepo();
+    const ok = fakeStartPlan();
+    const calls: unknown[] = [];
+    async function* refused(input: unknown): AsyncGenerator<never> {
+      calls.push(input);
+      throw new Error('duplicate key value violates unique constraint "one_running_plan"');
+    }
+
+    const first = await runRiskJob(deps({ repo, startPlan: refused }));
+    expect(calls).toHaveLength(1);
+    expect(first.plans.started).toHaveLength(0);
+    expect(first.errors).toEqual([expect.objectContaining({ step: "start_plan", message: expect.stringContaining("one_running_plan") })]);
+
+    const second = await runRiskJob(deps({ repo, startPlan: ok.startPlan }));
+    expect(ok.calls).toHaveLength(1);
+    expect(second.plans.started).toHaveLength(1);
+    expect(second.plans.alreadyTriggered).toBe(0);
+  });
+
   it("an attestation signed by a non-oracle key is stored with sig_valid=false and starts no plan", async () => {
     await publish("court_enforcement", "forged");
     const repo = new FakeRiskRepo();

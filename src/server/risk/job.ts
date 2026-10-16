@@ -64,6 +64,11 @@ export interface RiskRepo {
     kind: string;
     simulated: boolean;
   }): Promise<boolean>;
+  /**
+   * Gives a claim back when no plan row could be created for it (e.g. another plan still holds
+   * the key), so a later run can try again. Appends to the audit log; nothing is deleted.
+   */
+  releaseExitTrigger(input: { userId: string; prepaidPlanId: string; attestationId: string; reason: string }): Promise<void>;
   /** Inserts unless the same (merchant, kind, level, sources) was stored the same day. */
   saveSignal(row: RiskSignalRow): Promise<boolean>;
   setMerchantRiskLevel(merchantId: string, level: RiskLevel): Promise<void>;
@@ -105,16 +110,21 @@ function signalKind(sourceIds: string[]): "complaints" | "news" {
   return sourceIds.length > 0 && sourceIds.every((id) => /news/i.test(id)) ? "news" : "complaints";
 }
 
+/** Runs a plan to its end. `planId` stays null when the plan row was never created. */
 async function drainPlan(start: StartPlanFn, input: StartPlanInput) {
   let planId: string | null = null;
   let status: "done" | "paused" | "failed" | "unknown" = "unknown";
-  for await (const ev of start(input)) {
-    if (ev.type === "plan") planId = ev.planId;
-    if (ev.type === "approval_required") status = "paused";
-    if (ev.type === "done" && status !== "paused") status = "done";
-    if (ev.type === "error") status = "failed";
+  try {
+    for await (const ev of start(input)) {
+      if (ev.type === "plan") planId = ev.planId;
+      if (ev.type === "approval_required") status = "paused";
+      if (ev.type === "done" && status !== "paused") status = "done";
+      if (ev.type === "error") status = "failed";
+    }
+  } catch (e) {
+    return { planId, status: "failed" as const, error: e };
   }
-  return { planId, status };
+  return { planId, status, error: null };
 }
 
 export async function runRiskJob(deps: RiskJobDeps): Promise<RiskJobStats> {
@@ -215,7 +225,18 @@ export async function runRiskJob(deps: RiskJobDeps): Promise<RiskJobStats> {
           }
           // userId comes from the plan row (scheduler), never from registry data (H8).
           const run = await drainPlan(deps.startPlan, { userId: plan.userId, trigger: "prepaid_risk", subjectId: plan.planId });
-          if (run.planId) stats.plans.started.push({ planId: run.planId, prepaidPlanId: plan.planId, status: run.status });
+          if (!run.planId) {
+            // No plan row: the trigger was not acted on, so give it back for the next run.
+            await deps.repo.releaseExitTrigger({
+              userId: plan.userId,
+              prepaidPlanId: plan.planId,
+              attestationId: saved.id,
+              reason: "plan_not_created",
+            });
+            stats.errors.push({ merchantId: merchant.id, step: "start_plan", message: errMsg(run.error ?? "plan not created") });
+            continue;
+          }
+          stats.plans.started.push({ planId: run.planId, prepaidPlanId: plan.planId, status: run.status });
         } catch (e) {
           stats.errors.push({ merchantId: merchant.id, step: "start_plan", message: errMsg(e) });
         }

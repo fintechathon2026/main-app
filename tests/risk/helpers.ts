@@ -65,6 +65,9 @@ export class FakeRiskRepo implements RiskRepo {
     this.triggers.add(key);
     return true;
   }
+  async releaseExitTrigger(input: { prepaidPlanId: string; attestationId: string }) {
+    this.triggers.delete(`${input.attestationId}:${input.prepaidPlanId}`);
+  }
   async saveSignal(row: RiskSignalRow) {
     const day = row.observedAt.toISOString().slice(0, 10);
     const dup = this.signals.some(
