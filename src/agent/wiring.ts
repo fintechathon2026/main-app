@@ -5,7 +5,7 @@
 //   executor     -> getExecutor()         (minimal R2 version, src/server/executor)
 //   reader       -> createDocumentReader  over ingest storage (local dir in dev)
 //   signalReader -> createSignalReader    over the registry simulator (SIM_BASE_URL)
-//   readTools    -> read side (src/agent/tools/read), wired when it lands
+//   readTools    -> read side (src/agent/tools/read)
 
 import { PgPlanStore } from "@/src/server/plan-store";
 import { getExecutor } from "@/src/server/executor";
@@ -19,7 +19,7 @@ import { getCheckpointer } from "./checkpointer";
 import type { AgentDeps } from "./deps";
 import { createModelClients } from "./models";
 import { pgPlanRegistry, type RunEnv } from "./run";
-import type { ReadTool } from "./tools/types";
+import { readTools } from "./tools/read";
 
 export class NotWiredError extends Error {
   constructor(what: string, from: string) {
@@ -27,9 +27,6 @@ export class NotWiredError extends Error {
     this.name = "NotWiredError";
   }
 }
-
-// TODO(integration): replace with the read tools from "@/src/agent/tools/read".
-const readTools: ReadTool[] = [];
 
 let deps: AgentDeps | null = null;
 let graph: AgentGraph | null = null;
