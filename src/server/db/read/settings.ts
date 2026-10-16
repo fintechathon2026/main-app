@@ -34,17 +34,14 @@ export async function getUserSettings(q: Queryable, userId: string): Promise<Use
     `select version, policy_json from public.mandates where user_id = $1 and status = 'active' limit 1`,
     [userId],
   );
-  const a = await q.query(
-    `select currency from public.accounts where user_id = $1 order by id limit 1`,
-    [userId],
-  );
+  const u = await q.query(`select base_currency from public.users where id = $1`, [userId]);
   const row = m.rows[0] as { version?: unknown; policy_json?: unknown } | undefined;
   const policy = Policy.safeParse(row?.policy_json ?? {});
   const p = policy.success ? policy.data : {};
-  const acct = (a.rows[0] as { currency?: string } | undefined)?.currency;
+  const profile = (u.rows[0] as { base_currency?: string } | undefined)?.base_currency;
   const act = p.subscriptions?.auto_cancel_trials;
   return {
-    baseCurrency: p.base_currency ?? acct ?? DEFAULT_BASE_CURRENCY,
+    baseCurrency: p.base_currency ?? profile ?? DEFAULT_BASE_CURRENCY,
     mandateVersion: row?.version != null ? zNum.parse(row.version) : null,
     autoCancelTrials: act?.enabled ? { enabled: true, daysBeforeCharge: act.days_before_charge ?? 1 } : null,
     anomaly: { k: p.bills?.anomaly?.k ?? 3.5, minHistory: p.bills?.anomaly?.min_history ?? 3 },

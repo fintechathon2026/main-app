@@ -36,7 +36,8 @@ export type ViewDeps = { repos: ReadRepos; userId: string; now: string };
 export const DETECTION_LOOKBACK_DAYS = 400;
 export const SOFT_SIGNAL_WINDOW_DAYS = 30;
 export const TEST_TOKEN_NOTICE = "Test token, no value";
-export const USAGE_METRICS = { sessions: "sessions", lastUsed: "last_used" } as const;
+/** `sessions_per_month` (as seeded) is used as is; `sessions` over a period is scaled to 30 days. */
+export const USAGE_METRICS = { perMonth: "sessions_per_month", sessions: "sessions", lastUsed: "last_used" } as const;
 
 const today = (d: ViewDeps) => d.now.slice(0, 10);
 const fenToYuan = (fen: number) => Math.round(fen) / 100;
@@ -93,14 +94,17 @@ function chargesByMerchant(txs: readonly TransactionRow[]): Map<string, ChargeTx
 function usageFor(row: SubscriptionRow, signals: readonly UsageSignalRow[]): SubscriptionItem["usage"] {
   const mine = signals.filter((s) => s.subscription_id === row.id || (!s.subscription_id && s.merchant_id === row.merchant_id));
   if (mine.length === 0) return null;
-  const sessions = mine.find((s) => s.metric === USAGE_METRICS.sessions && s.value !== null);
+  const perMonthRow = mine.find((s) => s.metric === USAGE_METRICS.perMonth && s.value !== null);
+  const sessions = perMonthRow ?? mine.find((s) => s.metric === USAGE_METRICS.sessions && s.value !== null);
   const lastUsed = mine
     .filter((s) => s.metric === USAGE_METRICS.lastUsed && s.period_end)
     .map((s) => s.period_end as string)
     .sort()
     .pop();
   let perMonth: number | null = null;
-  if (sessions && sessions.value !== null) {
+  if (perMonthRow && perMonthRow.value !== null) {
+    perMonth = perMonthRow.value;
+  } else if (sessions && sessions.value !== null) {
     const days = sessions.period_start && sessions.period_end ? daysBetween(sessions.period_start, sessions.period_end) + 1 : 30;
     perMonth = Math.round(((sessions.value * 30) / Math.max(1, days)) * 10) / 10;
   }
@@ -405,7 +409,7 @@ export async function buildPrepaidPlans(d: ViewDeps): Promise<PrepaidPlansRespon
 }
 
 function offerItem(o: PrepaidOfferRow, cur: string, soft: RiskSignalRow[], hard: AttestationRow[], now: string): PrepaidOfferItem | null {
-  const ppv = o.offer_json.payPerVisitPrice;
+  const ppv = o.pay_per_visit_price ?? o.offer_json.payPerVisitPrice;
   if (ppv === undefined || !(ppv > 0)) return null; // the advisor needs q; skip malformed offers
   const unit = fenToYuan(o.unit_price);
   return {

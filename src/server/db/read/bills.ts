@@ -1,16 +1,17 @@
 // Bills (PRD §13 `bills`) with the biller's registry name. The payee account reference is never
 // selected: read tools have no reason to see it (FR4.5).
-// Amount origin (architecture §10.3): `document` when the bill came from a document, else
-// `mock_bank`.
+// Amount origin (architecture §10.3) is stored in `bills.amount_origin`.
 
 import { z } from "zod";
-import { type Queryable, parseRows, zDay, zNum, zTs } from "./db";
+import { type Queryable, parseRows, zDay, zNum, zOrigin, zTs } from "./db";
 
 export const BillRow = z.object({
   id: z.string(),
   biller_id: z.string(),
   biller_name: z.string().nullable(),
-  amount: zNum,
+  amount: zNum, // whole base-currency units
+  currency: z.string(),
+  amount_origin: zOrigin,
   due_date: zDay,
   period: z.string().nullable(),
   document_id: z.string().nullable(),
@@ -19,11 +20,12 @@ export const BillRow = z.object({
 });
 export type BillRow = z.output<typeof BillRow>;
 
-export const billOrigin = (b: Pick<BillRow, "document_id">) => (b.document_id ? "document" : "mock_bank") as "document" | "mock_bank";
+export const billOrigin = (b: Pick<BillRow, "amount_origin">) => b.amount_origin;
 
 export async function listBills(q: Queryable, userId: string, status?: string | null): Promise<BillRow[]> {
   const { rows } = await q.query(
-    `select b.id::text as id, b.biller_id, m.canonical_name as biller_name, b.amount::text as amount,
+    `select b.id::text as id, b.biller_id, coalesce(bl.name, m.canonical_name) as biller_name,
+            b.amount::text as amount, b.currency, b.amount_origin,
             b.due_date::text as due_date, b.period::text as period, b.document_id::text as document_id,
             b.status, b.created_at::text as created_at
        from public.bills b

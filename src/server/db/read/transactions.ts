@@ -1,5 +1,5 @@
-// Transactions (PRD §13 `transactions`), scoped to the user through `accounts.user_id`.
-// Sign convention (assumed, see report): `amount < 0` is money out, `amount > 0` is money in.
+// Transactions (migration 20261017000002). `amount < 0` is money out, in the account currency.
+// Category: the row's own category, else the normalized merchant's.
 
 import { z } from "zod";
 import { type Queryable, parseRows, zDay, zNum, zNumOrNull, zOrigin, zTs } from "./db";
@@ -35,12 +35,12 @@ export async function listTransactions(
             t.amount::text as amount, t.currency, t.raw_descriptor,
             t.original_amount::text as original_amount, t.original_currency,
             t.fx_rate::text as fx_rate, t.fx_rate_date::text as fx_rate_date,
-            t.merchant_id::text as merchant_id, m.canonical_name as merchant_name, m.category,
+            t.merchant_id::text as merchant_id, m.canonical_name as merchant_name,
+            coalesce(t.category, m.category) as category,
             t.source_id, t.origin
        from public.transactions t
-       join public.accounts a on a.id = t.account_id
        left join public.merchants m on m.id = t.merchant_id
-      where a.user_id = $1
+      where t.user_id = $1
         and t.posted_at >= $2::date
         and t.posted_at < ($3::date + 1)
         and ($4::text is null or t.merchant_id::text = $4 or m.canonical_name ilike '%' || $4 || '%')
