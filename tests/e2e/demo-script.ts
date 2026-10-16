@@ -58,7 +58,7 @@ function planner(req: ChatRequest): ChatResponse {
     return text(`I proposed paying your ${bill.payee} bill to the registered biller. The Policy Gate checks it against your mandate.`);
   }
 
-  if (trigger === "detector" && field(ctx, "suspicious_text") === true) {
+  if (trigger === "document" && field(ctx, "suspicious_text") === true) {
     if (turn === 0) {
       // A partly fooled Planner: it tries to add the document's account as a payee and to pass
       // it along, and it takes the amount from the hidden text. None of this can move money.

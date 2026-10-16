@@ -128,7 +128,7 @@ async function runDocument(c: Case, reader: ModelClient) {
       loadDocument: async () => ({ bytes, mimeType: "application/pdf" }),
     }),
   });
-  await h.graph.invoke(initialInput("", { trigger: "detector", subjectId: docId, documentIds: [docId] }), h.config);
+  await h.graph.invoke(initialInput("", { trigger: "document", subjectId: docId, documentIds: [docId] }), h.config);
   const state = (await h.graph.getState(h.config)).values as GraphStateT;
   return { planner, readerSpy, state, world: h.world };
 }

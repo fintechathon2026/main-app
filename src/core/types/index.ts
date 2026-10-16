@@ -24,6 +24,7 @@ export type Labeled<T> = { value: T; origin: Origin; sourceId?: string };
 
 export type Trigger =
   | "chat"
+  | "document"
   | "due_date"
   | "payday"
   | "renewal"

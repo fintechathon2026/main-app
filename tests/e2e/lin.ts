@@ -307,7 +307,7 @@ export async function uploadFlow(env: LinEnv, bytes: Uint8Array): Promise<FlowRe
       repo: env.repo,
       storage: env.storage,
       onDocument: async (documentId, userId) => {
-        events = await drain(startPlan({ userId, trigger: "detector", subjectId: documentId, documentIds: [documentId] }, env));
+        events = await drain(startPlan({ userId, trigger: "document", subjectId: documentId, documentIds: [documentId] }, env));
       },
     },
   );
