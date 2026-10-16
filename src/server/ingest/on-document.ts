@@ -1,8 +1,12 @@
-// Hook called once per newly ingested document. Integration replaces the body with the agent
-// run (trigger with documentIds = [documentId]; the `reader` node calls the DocumentReaderPort).
+// Hook called once per newly ingested document: starts a plan whose `reader` node runs the
+// quarantined Reader on it (architecture §10.1, §14.2). Uses trigger "detector" with the
+// document as subject, so one document has at most one running plan.
 
 import type { OnDocument } from "./upload";
 
-export const onDocumentUploaded: OnDocument = async () => {
-  // TODO(integration): start the plan run for this document.
+export const onDocumentUploaded: OnDocument = async (documentId, userId) => {
+  const { startPlan } = await import("@/src/agent/run");
+  for await (const ev of startPlan({ userId, trigger: "detector", subjectId: documentId, documentIds: [documentId] })) {
+    if (ev.type === "error") throw new Error(ev.message);
+  }
 };
