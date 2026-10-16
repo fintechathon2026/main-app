@@ -38,22 +38,24 @@
 
 ## 2. R1 Agent and Read Side
 
-- [ ] **R1-01** Graph skeleton with stub nodes; `RecordedModelClient` (§6.1 to §6.5)
-- [ ] **R1-02** Read queries and read tools against seed data; API types + fixtures for `/api/summary`, `/api/subscriptions`, `/api/recommendations` (§6.4, §13)
-- [ ] **R1-03** Reader subgraph + bill PDF upload job; `suspicious_text` flag (§6.3, §10). Due Sat
-- [ ] **R1-04** Planner prompts; `persist_plan`, `gate_preview`, `create_approval`, `await_approval` (interrupt only) (§6.3). Due Sat
-- [ ] **R1-05** FX fetch (Frankfurter, CNY and IDR) into `fx_rates` (§10.1). Due Sat
-- [ ] **R1-06** **Advisor tool** `advise_prepaid` as a pure function with unit tests: savings, break-even, `λ_t`, expected loss, recommendation; Lin's example gives 1,500 / 48 / 300 (PRD §15.11). Due Sat
-- [ ] **R1-07** Prepaid read tools `list_prepaid_plans`, `list_risk_signals`; `prepaid_exit(plan_id)` schema captured, not executed (§6.4). Due Sat
-- [ ] **R1-08** API types + fixtures for `/api/prepaid/plans`, `/api/prepaid/offers`, `/api/prepaid/offers/:id/advice` (§13). Due Sat 12:00 (R4 depends on it)
-- [ ] **R1-09** **Signal Reader** subgraph: complaint and news text → `{level, summary, sourceIds}`, no tools, disjoint state (§6.3). Due Sat
-- [ ] **R1-10** Recurring detection (FX-normalized), MAD anomaly, rec score, summary figures; routes live (PRD §15). Due Sun 12:00
-- [ ] **R1-11** First end-to-end bill run with R2 (M1). Due Sun 12:00
-- [ ] **R1-12** `prepaid_risk` trigger from `cron/risk` into the graph; Planner proposes `prepaid_exit` on a hard signal, warning only on soft signals. Dep: R3-10, R2-07. Due Sun 21:00
-- [ ] **R1-13** Explainer templates incl. currency and `tx {short_hash}`; numbers post-checked against audit rows (§6.7). Due Mon
-- [ ] **R1-14** Harness tests: canary strings (PDFs and complaint texts) never in Planner prompts; forged resume; double resume; Reader and Signal Reader have no tools (§18.1). Due Mon
-- [ ] **R1-15** Demo-mode recordings for the full demo path incl. prepaid (§18.3). Due Mon 21:00
-- [ ] **R1-16** Tech doc sections: agent design, injection defenses, core algorithms incl. advisor. Due Mon 20:00
+- [x] **R1-01** Graph skeleton with stub nodes; `RecordedModelClient` (§6.1 to §6.5)
+- [x] **R1-02** Read queries and read tools against seed data; API types + fixtures for `/api/summary`, `/api/subscriptions`, `/api/recommendations` (§6.4, §13)
+- [x] **R1-03** Reader subgraph + bill PDF upload job; `suspicious_text` flag (§6.3, §10). Due Sat
+- [x] **R1-04** Planner prompts; `persist_plan`, `gate_preview`, `create_approval`, `await_approval` (interrupt only) (§6.3). Due Sat
+- [x] **R1-05** FX fetch (Frankfurter, CNY and IDR) into `fx_rates` (§10.1). Due Sat
+- [x] **R1-06** **Advisor tool** `advise_prepaid` as a pure function with unit tests: savings, break-even, `λ_t`, expected loss, recommendation; Lin's example gives 1,500 / 48 / 300 (PRD §15.11). Due Sat
+- [x] **R1-07** Prepaid read tools `list_prepaid_plans`, `list_risk_signals`; `prepaid_exit(plan_id)` schema captured, not executed (§6.4). Due Sat
+- [x] **R1-08** API types + fixtures for `/api/prepaid/plans`, `/api/prepaid/offers`, `/api/prepaid/offers/:id/advice` (§13). Due Sat 12:00 (R4 depends on it)
+- [x] **R1-09** **Signal Reader** subgraph: complaint and news text → `{level, summary, sourceIds}`, no tools, disjoint state (§6.3). Due Sat
+- [x] **R1-10** Recurring detection (FX-normalized), MAD anomaly, rec score, summary figures; routes live (PRD §15). Due Sun 12:00
+- [x] **R1-11** First end-to-end bill run with R2 (M1). Due Sun 12:00 *(on local Supabase, against minimal R2/R3 pieces; see note below)*
+- [x] **R1-12** `prepaid_risk` trigger from `cron/risk` into the graph; Planner proposes `prepaid_exit` on a hard signal, warning only on soft signals. Dep: R3-10, R2-07. Due Sun 21:00
+- [x] **R1-13** Explainer templates incl. currency and `tx {short_hash}`; numbers post-checked against audit rows (§6.7). Due Mon
+- [x] **R1-14** Harness tests: canary strings (PDFs and complaint texts) never in Planner prompts; forged resume; double resume; Reader and Signal Reader have no tools (§18.1). Due Mon
+- [x] **R1-15** Demo-mode recordings for the full demo path incl. prepaid (§18.3). Due Mon 21:00 *(hand-written answers in `evals/recordings/demo_lin`; re-record live with `scripts/record-demo.ts` once an Anthropic key exists)*
+- [x] **R1-16** Tech doc sections: agent design, injection defenses, core algorithms incl. advisor. Due Mon 20:00
+
+> **R1 status (Oct 17):** all R1 items are on branch `feat/r1-agent`, not yet on `main`. To run end to end, R1 also built **minimal versions** of R2/R3 work, each marked "Owner: R2|R3 … Minimal version by R1" in its header: shared types, migrations + seed + RLS, mock bank, Gate `decide`, executor + mock-bank adapter + mock escrow, approvals + routes, audit log, plan store, registry simulator, cron/risk. R2/R3 should extend these instead of starting over; handover notes are in each file header. Not ticked below, because the owners decide when they are done.
 
 ## 3. R2 Safety, Execution and Evaluation
 
