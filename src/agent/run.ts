@@ -8,6 +8,7 @@ import { Command } from "@langchain/langgraph";
 import type { Trigger } from "@/src/core/types";
 import type { ChatStreamEvent, ResumeResponse } from "@/src/server/api-types";
 import { withUserTx } from "@/src/server/db/pool";
+import { closeExpiredPausedPlansTx } from "@/src/server/plans/expiry";
 import type { AgentDeps } from "./deps";
 import { RECURSION_LIMIT, type AgentGraph, type GraphStateT } from "./graph";
 
@@ -139,6 +140,8 @@ export async function resumePlan(input: { planId: string; userId: string }, env?
 export const pgPlanRegistry: PlanRegistry = {
   create: ({ userId, trigger, subjectId }) =>
     withUserTx(userId, async (tx) => {
+      // A paused plan whose approvals expired would otherwise hold this key forever.
+      await closeExpiredPausedPlansTx(tx, userId, { trigger, subjectId });
       const r = await tx.query<{ id: string }>(
         "insert into public.plans (user_id, trigger, subject_id, planner_model, status) values ($1, $2, $3, $4, 'running') returning id",
         [userId, trigger, subjectId, process.env.REINS_PLANNER_MODEL || "claude-sonnet-5-5"],
