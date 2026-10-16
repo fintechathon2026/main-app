@@ -1,0 +1,224 @@
+{
+  "period": "2026-10",
+  "baseCurrency": "CNY",
+  "income": {
+    "amount": 12000,
+    "currency": "CNY"
+  },
+  "spending": {
+    "amount": 992,
+    "currency": "CNY"
+  },
+  "byCategory": [
+    {
+      "category": "food_delivery",
+      "amount": {
+        "amount": 420,
+        "currency": "CNY"
+      },
+      "transactionIds": [
+        "7c000000-0000-4000-8000-000000000015",
+        "7c000000-0000-4000-8000-000000000016",
+        "7c000000-0000-4000-8000-000000000017",
+        "7c000000-0000-4000-8000-000000000018"
+      ]
+    },
+    {
+      "category": "shopping",
+      "amount": {
+        "amount": 268,
+        "currency": "CNY"
+      },
+      "transactionIds": [
+        "7c000000-0000-4000-8000-00000000001b"
+      ]
+    },
+    {
+      "category": "utilities",
+      "amount": {
+        "amount": 174,
+        "currency": "CNY"
+      },
+      "transactionIds": [
+        "7c000000-0000-4000-8000-000000000011"
+      ]
+    },
+    {
+      "category": "transport",
+      "amount": {
+        "amount": 100,
+        "currency": "CNY"
+      },
+      "transactionIds": [
+        "7c000000-0000-4000-8000-000000000019",
+        "7c000000-0000-4000-8000-00000000001a"
+      ]
+    },
+    {
+      "category": "entertainment",
+      "amount": {
+        "amount": 30,
+        "currency": "CNY"
+      },
+      "transactionIds": [
+        "7c000000-0000-4000-8000-000000000009"
+      ]
+    }
+  ],
+  "recurring": {
+    "bills": {
+      "amount": 3948,
+      "currency": "CNY"
+    },
+    "subscriptions": {
+      "amount": 187,
+      "currency": "CNY"
+    }
+  },
+  "upcoming14d": [
+    {
+      "kind": "trial_conversion",
+      "title": "Keep Premium",
+      "dueDate": "2026-10-19",
+      "amount": {
+        "amount": 28,
+        "currency": "CNY"
+      },
+      "refId": "5b000000-0000-4000-8000-000000000004"
+    },
+    {
+      "kind": "bill",
+      "title": "China Mobile",
+      "dueDate": "2026-10-20",
+      "amount": {
+        "amount": 88,
+        "currency": "CNY"
+      },
+      "refId": "b1000000-0000-4000-8000-000000000002"
+    },
+    {
+      "kind": "bill",
+      "title": "State Grid Shenzhen",
+      "dueDate": "2026-10-22",
+      "amount": {
+        "amount": 186,
+        "currency": "CNY"
+      },
+      "refId": "b1000000-0000-4000-8000-000000000003"
+    },
+    {
+      "kind": "renewal",
+      "title": "ChatGPT Plus",
+      "dueDate": "2026-10-24",
+      "amount": {
+        "amount": 20,
+        "currency": "USD",
+        "base": {
+          "amount": 142,
+          "currency": "CNY",
+          "rate": 7.12,
+          "rateDate": "2026-10-16"
+        }
+      },
+      "refId": "5b000000-0000-4000-8000-000000000001"
+    },
+    {
+      "kind": "bill",
+      "title": "Landlord Wang",
+      "dueDate": "2026-10-28",
+      "amount": {
+        "amount": 3500,
+        "currency": "CNY"
+      },
+      "refId": "b1000000-0000-4000-8000-000000000004"
+    },
+    {
+      "kind": "renewal",
+      "title": "NetEase Cloud Music",
+      "dueDate": "2026-10-29",
+      "amount": {
+        "amount": 15,
+        "currency": "CNY"
+      },
+      "refId": "5b000000-0000-4000-8000-000000000003"
+    }
+  ],
+  "balance": {
+    "amount": 9850,
+    "currency": "CNY"
+  },
+  "balanceAfterObligations": {
+    "amount": 5891,
+    "currency": "CNY"
+  },
+  "insights": [
+    {
+      "key": "top_category",
+      "text": "Food_delivery is your largest category this month: ¥420 (42% of spending).",
+      "amount": {
+        "amount": 420,
+        "currency": "CNY"
+      },
+      "refIds": [
+        "7c000000-0000-4000-8000-000000000015",
+        "7c000000-0000-4000-8000-000000000016",
+        "7c000000-0000-4000-8000-000000000017",
+        "7c000000-0000-4000-8000-000000000018"
+      ]
+    },
+    {
+      "key": "subscription_total",
+      "text": "Subscriptions cost ¥187 per month (¥2,244 per year), including ChatGPT Plus converted from a foreign currency.",
+      "amount": {
+        "amount": 187,
+        "currency": "CNY"
+      },
+      "refIds": [
+        "5b000000-0000-4000-8000-000000000001",
+        "5b000000-0000-4000-8000-000000000002",
+        "5b000000-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "key": "price_change",
+      "text": "iQIYI went from ¥25 to ¥30 on 2026-09-05.",
+      "amount": {
+        "amount": 5,
+        "currency": "CNY"
+      },
+      "refIds": [
+        "5b000000-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "key": "trial_converting",
+      "text": "Keep Premium trial converts to ¥28 in 2 days (2026-10-19).",
+      "amount": {
+        "amount": 28,
+        "currency": "CNY"
+      },
+      "refIds": [
+        "5b000000-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "key": "month_over_month",
+      "text": "Spending is up 132% versus the same days last month (¥564).",
+      "amount": {
+        "amount": 564,
+        "currency": "CNY"
+      },
+      "refIds": [
+        "7c000000-0000-4000-8000-000000000009",
+        "7c000000-0000-4000-8000-000000000011",
+        "7c000000-0000-4000-8000-000000000015",
+        "7c000000-0000-4000-8000-000000000016",
+        "7c000000-0000-4000-8000-000000000017",
+        "7c000000-0000-4000-8000-000000000018",
+        "7c000000-0000-4000-8000-000000000019",
+        "7c000000-0000-4000-8000-00000000001a",
+        "7c000000-0000-4000-8000-00000000001b"
+      ]
+    }
+  ]
+}

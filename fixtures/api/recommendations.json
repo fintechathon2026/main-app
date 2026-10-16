@@ -1,0 +1,86 @@
+{
+  "items": [
+    {
+      "id": "00000010-0000-4000-8000-000000000001",
+      "subscriptionId": "5b000000-0000-4000-8000-000000000002",
+      "score": 8,
+      "signals": [
+        {
+          "key": "duplicate",
+          "points": 3,
+          "detail": "Also subscribed to NetEase Cloud Music in the same category (entertainment).",
+          "source": {
+            "origin": "mock_bank",
+            "sourceId": "5b000000-0000-4000-8000-000000000003"
+          }
+        },
+        {
+          "key": "price_increase",
+          "points": 2,
+          "detail": "Price went from ¥25 to ¥30 on 2026-09-05.",
+          "source": {
+            "origin": "mock_bank",
+            "sourceId": "5b000000-0000-4000-8000-000000000002"
+          }
+        },
+        {
+          "key": "low_usage",
+          "points": 3,
+          "detail": "Used 1 time per month (below 2).",
+          "source": {
+            "origin": "simulated",
+            "sourceId": "mock_bank",
+            "simulated": true
+          }
+        }
+      ],
+      "annualSavings": {
+        "amount": 360,
+        "currency": "CNY"
+      },
+      "status": "open"
+    },
+    {
+      "id": "00000010-0000-4000-8000-000000000002",
+      "subscriptionId": "5b000000-0000-4000-8000-000000000003",
+      "score": 3,
+      "signals": [
+        {
+          "key": "duplicate",
+          "points": 3,
+          "detail": "Also subscribed to iQIYI in the same category (entertainment).",
+          "source": {
+            "origin": "mock_bank",
+            "sourceId": "5b000000-0000-4000-8000-000000000002"
+          }
+        }
+      ],
+      "annualSavings": {
+        "amount": 180,
+        "currency": "CNY"
+      },
+      "status": "open"
+    },
+    {
+      "id": "00000010-0000-4000-8000-000000000003",
+      "subscriptionId": "5b000000-0000-4000-8000-000000000001",
+      "score": 1,
+      "signals": [
+        {
+          "key": "fx_cost_high",
+          "points": 1,
+          "detail": "Estimated card FX markup about ¥26 per year (rate of 2026-10-16).",
+          "source": {
+            "origin": "fx_provider",
+            "sourceId": "2026-10-16"
+          }
+        }
+      ],
+      "annualSavings": {
+        "amount": 1709,
+        "currency": "CNY"
+      },
+      "status": "open"
+    }
+  ]
+}
