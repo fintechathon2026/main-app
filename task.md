@@ -38,55 +38,57 @@
 
 ## 2. R1 Agent and Read Side
 
-- [ ] **R1-01** Graph skeleton with stub nodes; `RecordedModelClient` (§6.1 to §6.5)
-- [ ] **R1-02** Read queries and read tools against seed data; API types + fixtures for `/api/summary`, `/api/subscriptions`, `/api/recommendations` (§6.4, §13)
-- [ ] **R1-03** Reader subgraph + bill PDF upload job; `suspicious_text` flag (§6.3, §10). Due Sat
-- [ ] **R1-04** Planner prompts; `persist_plan`, `gate_preview`, `create_approval`, `await_approval` (interrupt only) (§6.3). Due Sat
-- [ ] **R1-05** FX fetch (Frankfurter, CNY and IDR) into `fx_rates` (§10.1). Due Sat
-- [ ] **R1-06** **Advisor tool** `advise_prepaid` as a pure function with unit tests: savings, break-even, `λ_t`, expected loss, recommendation; Lin's example gives 1,500 / 48 / 300 (PRD §15.11). Due Sat
-- [ ] **R1-07** Prepaid read tools `list_prepaid_plans`, `list_risk_signals`; `prepaid_exit(plan_id)` schema captured, not executed (§6.4). Due Sat
-- [ ] **R1-08** API types + fixtures for `/api/prepaid/plans`, `/api/prepaid/offers`, `/api/prepaid/offers/:id/advice` (§13). Due Sat 12:00 (R4 depends on it)
-- [ ] **R1-09** **Signal Reader** subgraph: complaint and news text → `{level, summary, sourceIds}`, no tools, disjoint state (§6.3). Due Sat
-- [ ] **R1-10** Recurring detection (FX-normalized), MAD anomaly, rec score, summary figures; routes live (PRD §15). Due Sun 12:00
-- [ ] **R1-11** First end-to-end bill run with R2 (M1). Due Sun 12:00
-- [ ] **R1-12** `prepaid_risk` trigger from `cron/risk` into the graph; Planner proposes `prepaid_exit` on a hard signal, warning only on soft signals. Dep: R3-10, R2-07. Due Sun 21:00
-- [ ] **R1-13** Explainer templates incl. currency and `tx {short_hash}`; numbers post-checked against audit rows (§6.7). Due Mon
-- [ ] **R1-14** Harness tests: canary strings (PDFs and complaint texts) never in Planner prompts; forged resume; double resume; Reader and Signal Reader have no tools (§18.1). Due Mon
-- [ ] **R1-15** Demo-mode recordings for the full demo path incl. prepaid (§18.3). Due Mon 21:00
-- [ ] **R1-16** Tech doc sections: agent design, injection defenses, core algorithms incl. advisor. Due Mon 20:00
+- [x] **R1-01** Graph skeleton with stub nodes; `RecordedModelClient` (§6.1 to §6.5)
+- [x] **R1-02** Read queries and read tools against seed data; API types + fixtures for `/api/summary`, `/api/subscriptions`, `/api/recommendations` (§6.4, §13)
+- [x] **R1-03** Reader subgraph + bill PDF upload job; `suspicious_text` flag (§6.3, §10). Due Sat
+- [x] **R1-04** Planner prompts; `persist_plan`, `gate_preview`, `create_approval`, `await_approval` (interrupt only) (§6.3). Due Sat
+- [x] **R1-05** FX fetch (Frankfurter, CNY and IDR) into `fx_rates` (§10.1). Due Sat
+- [x] **R1-06** **Advisor tool** `advise_prepaid` as a pure function with unit tests: savings, break-even, `λ_t`, expected loss, recommendation; Lin's example gives 1,500 / 48 / 300 (PRD §15.11). Due Sat
+- [x] **R1-07** Prepaid read tools `list_prepaid_plans`, `list_risk_signals`; `prepaid_exit(plan_id)` schema captured, not executed (§6.4). Due Sat
+- [x] **R1-08** API types + fixtures for `/api/prepaid/plans`, `/api/prepaid/offers`, `/api/prepaid/offers/:id/advice` (§13). Due Sat 12:00 (R4 depends on it)
+- [x] **R1-09** **Signal Reader** subgraph: complaint and news text → `{level, summary, sourceIds}`, no tools, disjoint state (§6.3). Due Sat
+- [x] **R1-10** Recurring detection (FX-normalized), MAD anomaly, rec score, summary figures; routes live (PRD §15). Due Sun 12:00
+- [x] **R1-11** First end-to-end bill run with R2 (M1). Due Sun 12:00 *(on local Supabase, against minimal R2/R3 pieces; see note below)*
+- [x] **R1-12** `prepaid_risk` trigger from `cron/risk` into the graph; Planner proposes `prepaid_exit` on a hard signal, warning only on soft signals. Dep: R3-10, R2-07. Due Sun 21:00
+- [x] **R1-13** Explainer templates incl. currency and `tx {short_hash}`; numbers post-checked against audit rows (§6.7). Due Mon
+- [x] **R1-14** Harness tests: canary strings (PDFs and complaint texts) never in Planner prompts; forged resume; double resume; Reader and Signal Reader have no tools (§18.1). Due Mon
+- [x] **R1-15** Demo-mode recordings for the full demo path incl. prepaid (§18.3). Due Mon 21:00 *(hand-written answers in `evals/recordings/demo_lin`; re-record live with `scripts/record-demo.ts` once an Anthropic key exists)*
+- [x] **R1-16** Tech doc sections: agent design, injection defenses, core algorithms incl. advisor. Due Mon 20:00
+
+> **R1 status (Oct 17):** all R1 items are on branch `feat/r1-agent`, not yet on `main`. To run end to end, R1 also built **minimal versions** of R2/R3 work, each marked "Owner: R2|R3 … Minimal version by R1" in its header: shared types, migrations + seed + RLS, mock bank, Gate `decide`, executor + mock-bank adapter + mock escrow, approvals + routes, audit log, plan store, registry simulator, cron/risk. R2/R3 should extend these instead of starting over; handover notes are in each file header. Those items are annotated with an *[R1 note: …]* below and left unticked, because the owners decide when they are done.
 
 ## 3. R2 Safety, Execution and Evaluation
 
-- [ ] **R2-01** Shared types: `TypedAction`, `GateResult`, `GateSnapshot`, `Labeled<T>`, **`PrepaidFacts`**, prepaid rule IDs (§7.1, §24.9). Due Fri 23:00
-- [ ] **R2-02** Mandate schema incl. `prepaid` block, defaults, canonical hash, narrowing incl. prepaid rules (PRD §9). Due Sat
-- [ ] **R2-03** Gate pipeline steps 1 to 10 with unit tests; provenance matrix incl. `chain`, `oracle`, `web` (§7.2). Due Sat
-- [ ] **R2-04** **Prepaid Gate rules** with table-driven tests for every row in §24.9. Due Sat
-- [ ] **R2-05** Executor phases A/B/C, row lock, cap reservation, approvals, audit log (§8). Due Sat
-- [ ] **R2-06** **User-initiated actions** (`actor = user`, plan trigger `user_action`) through the same executor (§8.2). Due Sat
-- [ ] **R2-07** **Phase-A prepaid facts:** read plan from contract, recover signatures (viem), re-verify attestations against `ORACLE_ADDRESS` (§24.9, ADR-012). Dep: R3-03. Due Sun 12:00
-- [ ] **R2-08** Routes live: `/api/approvals`, `/api/feed` (+ `why`), `/api/mandates/*`, `/api/prepaid/purchase`, `/checkin`, `/exit`, `/api/prepaid/wallet` (§13). Due Sun 18:00
-- [ ] **R2-09** Concurrency test (100 parallel payments); property tests incl. prepaid narrowing (§7.3, §18.1). Due Sun
+- [ ] **R2-01** Shared types: `TypedAction`, `GateResult`, `GateSnapshot`, `Labeled<T>`, **`PrepaidFacts`**, prepaid rule IDs (§7.1, §24.9). Due Fri 23:00 *[R1 note: Minimal version by R1 in `src/core/types/index.ts` (types incl. `PrepaidFacts`). R2 to review and extend]*
+- [ ] **R2-02** Mandate schema incl. `prepaid` block, defaults, canonical hash, narrowing incl. prepaid rules (PRD §9). Due Sat *[R1 note: Partly by R1: zod schema, defaults, canonical hash, `LIN_MANDATE_V3` in `src/core/mandate/`. Narrowing not built]*
+- [ ] **R2-03** Gate pipeline steps 1 to 10 with unit tests; provenance matrix incl. `chain`, `oracle`, `web` (§7.2). Due Sat *[R1 note: Minimal version by R1: pure `decide()` with the §7.2 pipeline and table tests in `src/core/gate/`. Conformal anomaly and property tests not built]*
+- [ ] **R2-04** **Prepaid Gate rules** with table-driven tests for every row in §24.9. Due Sat *[R1 note: Minimal version by R1 with table-driven tests in `src/core/gate/decide.test.ts`]*
+- [ ] **R2-05** Executor phases A/B/C, row lock, cap reservation, approvals, audit log (§8). Due Sat *[R1 note: Minimal version by R1 in `src/server/executor/` (phases A/B/C, row lock, cap reservation, hash re-check under lock, approvals, audit). R2 to review]*
+- [ ] **R2-06** **User-initiated actions** (`actor = user`, plan trigger `user_action`) through the same executor (§8.2). Due Sat *[R1 note: Not built. The Gate denies user-initiated prepaid actions until signatures exist]*
+- [ ] **R2-07** **Phase-A prepaid facts:** read plan from contract, recover signatures (viem), re-verify attestations against `ORACLE_ADDRESS` (§24.9, ADR-012). Dep: R3-03. Due Sun 12:00 *[R1 note: Partly by R1: attestation signature re-verified with viem at decision time. Contract reads and user/merchant signature recovery not built]*
+- [ ] **R2-08** Routes live: `/api/approvals`, `/api/feed` (+ `why`), `/api/mandates/*`, `/api/prepaid/purchase`, `/checkin`, `/exit`, `/api/prepaid/wallet` (§13). Due Sun 18:00 *[R1 note: Partly by R1: `GET /api/approvals` and `POST /api/approvals/[id]` only]*
+- [ ] **R2-09** Concurrency test (100 parallel payments); property tests incl. prepaid narrowing (§7.3, §18.1). Due Sun *[R1 note: Partly by R1: concurrency test with 20 parallel payments (not 100) in `tests/foundations/`. Property tests not built]*
 - [ ] **R2-10** Second review of `contracts/**` (§24.11). Dep: R3-02. Due Sun 12:00
 - [ ] **R2-11** Eval runner, arms A/B, ≥ 40 attacks incl. cases 19 to 26; three force-sent on-chain reverts for evidence (PRD §20, §24.5). Due Mon 18:00
 - [ ] **R2-12** Security self-assessment: tiers, known-risk list incl. T21 to T27 and "contract not audited", red-team numbers with upper bounds. Due Mon 20:00 draft, Tue 12:00 final
-- [ ] **R2-13** Lint rules: only the executor imports settlement adapters; chain keys read only in their modules (§5.1). Due Sat
+- [ ] **R2-13** Lint rules: only the executor imports settlement adapters; chain keys read only in their modules (§5.1). Due Sat *[R1 note: Done by R1: ESLint import boundaries in `eslint.config.mjs`. Chain-key env rule not built]*
 
 ## 4. R3 Platform, Data and Chain
 
 - [ ] **R3-01** Generate relayer, agent, merchant, oracle and deployer keys; fund relayer, agent and deployer on Base Sepolia with margin; note faucet limits (§24.2, §24.12). Due Fri 23:59
 - [ ] **R3-02** `contracts/`: `TestCNY`, `PrepaidEscrow` (§24.3, §24.4); Foundry unit tests for every `require`. Due Sat 13:00
 - [ ] **R3-03** Deploy script + `deployments/base-sepolia.json`; spike script → three hashes in `docs/evidence/spike.md` (**G1**). Due Sat 18:00
-- [ ] **R3-04** Migrations, roles, RLS for the core tables (§12) plus prepaid tables (§24.8) and the `actions.actor` column; seed loader with Lin's data. Due Sat 12:00 if not done
-- [ ] **R3-05** Mock bank: accounts, bills, billers, payments with idempotency, subscriptions with trials, cancel, scenarios, attack injection; mock bank adapter (§3, PRD §14.1). Due Sat
-- [ ] **R3-06** Checkpointer `setup()` + Supabase pooler test; Vercel deploy on Node 22 (§19). Due Sat
-- [ ] **R3-07** Cron routes with run-now buttons, incl. `chain-sync` and `risk`; kill switch; settings (§11). Due Sun
+- [ ] **R3-04** Migrations, roles, RLS for the core tables (§12) plus prepaid tables (§24.8) and the `actions.actor` column; seed loader with Lin's data. Due Sat 12:00 if not done *[R1 note: Done by R1 (minimal): migrations 001–011, RLS, append-only audit log, seed for Lin in `supabase/`. R3 to review; add new migrations, don't edit applied ones]*
+- [ ] **R3-05** Mock bank: accounts, bills, billers, payments with idempotency, subscriptions with trials, cancel, scenarios, attack injection; mock bank adapter (§3, PRD §14.1). Due Sat *[R1 note: Done by R1 (minimal): `src/mockbank/`, `app/mockbank/`, settlement adapter. Internal transfer and reverse routes not built]*
+- [ ] **R3-06** Checkpointer `setup()` + Supabase pooler test; Vercel deploy on Node 22 (§19). Due Sat *[R1 note: Partly by R1: `pnpm db:checkpointer` script with grants. Pooler test and Vercel deploy not done]*
+- [ ] **R3-07** Cron routes with run-now buttons, incl. `chain-sync` and `risk`; kill switch; settings (§11). Due Sun *[R1 note: Partly by R1: `cron/fx`, `cron/detect`, `cron/risk`, `cron/cleanup`. `chain-sync`, run-now buttons, kill switch and settings not built]*
 - [ ] **R3-08** **`EscrowAdapter`:** relayer and agent senders, advisory-lock nonces, stored raw transactions, receipts, `reconcile`; eval force-send option (§24.5). Dep: R3-03, R2-01. Due Sun 15:00
 - [ ] **R3-09** Indexer `chain-sync` into `prepaid_plans`, `prepaid_sessions`, `chain_cursors` (§24.6). Due Sun 15:00
-- [ ] **R3-10** Simulators: merchant offers (FitBox with escrow; one merchant without), check-in signing, gym-tablet page; registry attestations, publish button, soft signals incl. attack texts (§24.7). Due Sun 15:00
+- [ ] **R3-10** Simulators: merchant offers (FitBox with escrow; one merchant without), check-in signing, gym-tablet page; registry attestations, publish button, soft signals incl. attack texts (§24.7). Due Sun 15:00 *[R1 note: Partly by R1: registry simulator only (`src/sim/registry/`, `app/sim/registry/`). Merchant offers, check-in signing and gym tablet not built]*
 - [ ] **R3-11** Prepaid end to end on testnet with R1, R2, R4 (**M2**). Due Sun 21:00
-- [ ] **R3-12** *Only if G1 failed:* `MockEscrowAdapter` with the same checks (§24.13). Due Sun 15:00
+- [ ] **R3-12** *Only if G1 failed:* `MockEscrowAdapter` with the same checks (§24.13). Due Sun 15:00 *[R1 note: Partly by R1: mock escrow handles `prepaid_exit` only, without signature checks]*
 - [ ] **R3-13** Foundry fuzz and invariant tests (§24.11); chain integration tests on anvil incl. 10 parallel nonces. Due Mon 15:00
-- [ ] **R3-14** RLS tests per role; audit export JSONL/CSV; mock bank log export; **transaction hash list with Basescan links** (§17). Due Mon
+- [ ] **R3-14** RLS tests per role; audit export JSONL/CSV; mock bank log export; **transaction hash list with Basescan links** (§17). Due Mon *[R1 note: Partly by R1: a cross-user RLS test. Per-role tests, audit export and hash list not built]*
 - [ ] **R3-15** README, deployment instructions incl. contract deploy and addresses; tech doc "System architecture" + contract spec. Due Mon 20:00
 - [ ] **R3-16** Final deploy, tag `demo-*`, smoke E2E (**M4**). Due Tue 12:00
 

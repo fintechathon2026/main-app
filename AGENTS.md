@@ -14,6 +14,8 @@ Conventional Commits: `type(scope): message`
 - Breaking change: add `!` after the scope (`feat(mandate)!: ...`) and explain it in the body.
 - Body (optional): explain why, not what. Wrap at 72 characters.
 - One logical change per commit. Do not mix unrelated files.
+- Commit after every small change. Do not batch work into large commits.
+- Never `git push` unless the user explicitly says to push.
 - **Do not add `Co-Authored-By` or any other attribution trailer.**
 - Never commit secrets, `.env*` files, private keys or real personal data.
 
@@ -75,4 +77,19 @@ Imports are enforced by ESLint (`architecture.md` §5.1).
 
 ## Commands
 
-Filled in when the repo is scaffolded: `pnpm dev`, `pnpm lint`, `pnpm test`, `forge test`, local Supabase, eval runner.
+Node 22, pnpm 11. Copy `.env.example` to `.env.local` first.
+
+| Command | Does |
+|---|---|
+| `pnpm install` | Install dependencies (exact versions, lockfile committed) |
+| `pnpm dev` | Next.js dev server |
+| `pnpm lint` | ESLint, including the module-boundary rules |
+| `pnpm typecheck` | `next typegen` + `tsc --noEmit` |
+| `pnpm test` | Vitest (`src/**/*.test.ts`, `tests/**/*.test.ts`) |
+| `forge test` | Contract tests, from `contracts/` |
+
+Local Supabase and the eval runner are added when they land.
+
+## Next.js 16
+
+This Next.js version has breaking changes from older training data. Before writing Next.js code, read the relevant guide in `node_modules/next/dist/docs/` and heed deprecation notices. `cacheComponents` is on in `next.config.ts`. Route handlers run on Node by default. Do not add `export const runtime`: Cache Components does not support the runtime segment config, even `"nodejs"`. The Edge runtime is deprecated and not used.
