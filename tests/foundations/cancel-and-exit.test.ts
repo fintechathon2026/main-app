@@ -126,6 +126,26 @@ describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
     expect(ep.rows[0].status).toBe("active");
   });
 
+  it("an action whose args changed after the first read never executes", async () => {
+    const { u, planId, chainPlanId } = await prepaidUser();
+    const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
+    const racing = createExecutor({
+      // The escrow read happens between the executor's first read of the action and its locked
+      // re-read; change the row there.
+      transport: async (req) => {
+        if (req.method === "GET" && new URL(req.url).pathname.includes("/escrow/plans/")) {
+          await admin.query("update public.actions set args_json = $2 where id = $1", [id, JSON.stringify({ plan_id: randomUUID() })]);
+        }
+        return inProcessTransport(req);
+      },
+    });
+    const r = await racing.run(id, u.id);
+    expect(r.error).toBe("hash_mismatch");
+    expect(r.status).not.toBe("succeeded");
+    const ep = await admin.query("select status from mockbank.escrow_plans where chain_plan_id = $1", [chainPlanId]);
+    expect(ep.rows[0].status).toBe("active");
+  });
+
   it("attested prepaid exit refunds the owner on the mock escrow", async () => {
     const { u, planId, merchantId, chainPlanId } = await prepaidUser();
     await insertSignedAttestation(admin, { merchantId, caseLabel: randomUUID(), issuedAgoSeconds: 7200, validForSeconds: 7 * 86_400 });

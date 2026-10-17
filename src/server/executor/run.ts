@@ -90,6 +90,12 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         return { kind: "stop", res: { actionId, status: cur.status as ExecResult["status"], result: cur.result_json ?? undefined } };
       }
 
+      // The row may have changed since phase A: the hash must hold for what we are about to decide on.
+      if (!verifyActionHash(cur)) {
+        await appendAudit(tx, userId, { actor: "system", eventType: "executor.hash_mismatch", data: { actionId, phase: "execute" } });
+        return { kind: "stop", res: { actionId, status: cur.status as ExecResult["status"], error: "hash_mismatch" } };
+      }
+
       const snap = await buildSnapshot(tx, cur, ctx, facts);
       const gate = decide(typedAction(cur), snap);
       // The attestation the decision used; settlement passes exactly this one (never re-selects).
