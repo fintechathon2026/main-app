@@ -66,7 +66,7 @@ Imports are enforced by ESLint (`architecture.md` §5.1).
 
 ## Working rules
 
-- Short-lived feature branches, PR into `main`, one reviewer. The human owner reads every diff before opening a PR.
+- Create a new branch from `origin/main` before the first edit of every task, named `<type>/<short-description>`; PR into `main`, one reviewer. Never work on or push to `main`. Full rules: `contribute.md`. The human owner reads every diff before opening a PR.
 - One agent session per task, on its own branch or worktree.
 - Run `pnpm lint && pnpm test` before a PR (`forge test` when `contracts/**` changes).
 - Never change tests to make them pass: no edited expectations, `.skip` or lowered thresholds.
