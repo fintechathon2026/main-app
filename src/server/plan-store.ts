@@ -105,9 +105,10 @@ export class PgPlanStore implements PlanStore {
     return withUserTx(userId, async (tx) => {
       const r = await tx.query(
         `select a.id, a.tool, a.status, coalesce(a.decision, a.preview_decision) as decision, a.rule_ids, a.mandate_version,
-                a.args_json, a.result_json, u.base_currency, coalesce(b.name, pm.name) as payee_name
+                a.args_json, a.result_json, coalesce(bl.currency, u.base_currency) as currency, coalesce(b.name, pm.name) as payee_name
            from public.actions a
            join public.users u on u.id = a.user_id
+           left join public.bills bl on a.tool = 'pay_bill' and bl.id::text = a.args_json->>'bill_id' and bl.user_id = a.user_id
            left join public.billers b on a.tool = 'pay_bill' and b.id = a.args_json->>'biller_id' and b.user_id = a.user_id
            left join public.prepaid_plans pp on a.tool like 'prepaid_%' and pp.id::text = a.args_json->>'plan_id'
            left join public.prepaid_merchants pm on pm.id = pp.merchant_id
@@ -129,7 +130,7 @@ export class PgPlanStore implements PlanStore {
         if (x.payee_name) row.payeeName = x.payee_name;
         if (amount !== undefined) {
           row.amount = amount;
-          row.currency = x.base_currency;
+          row.currency = x.currency;
         }
         if (txHash) row.txHash = txHash;
         return row;

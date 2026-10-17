@@ -58,6 +58,14 @@ describe.skipIf(!DB_ENABLED)("foundations: executor against Postgres + mock bank
     expect(rows[0].txHash).toBeTruthy();
   });
 
+  it("labels the feed amount with the bill's currency, not the user's base currency", async () => {
+    const u = await createTestUser(admin, [{ biller: "CHINA_MOBILE", amount: 20, key: "mobile" }]);
+    await admin.query("update public.bills set currency = 'USD' where id = $1", [u.bills.mobile]);
+    const { planId } = await planPayments(store, u.id, [{ billId: u.bills.mobile, billerId: "CHINA_MOBILE", amount: 20 }]);
+    const rows = await store.auditRowsForPlan(planId, u.id);
+    expect(rows[0]).toMatchObject({ tool: "pay_bill", amount: 20, currency: "USD" });
+  });
+
   it("denies an amount that does not match the bill row", async () => {
     const u = await createTestUser(admin, [{ biller: "CHINA_MOBILE", amount: 98, key: "mobile" }]);
     const { ids } = await planPayments(store, u.id, [{ billId: u.bills.mobile, billerId: "CHINA_MOBILE", amount: 97 }]);
