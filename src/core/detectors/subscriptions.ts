@@ -16,6 +16,27 @@ export type ExistingSub = {
   billingCurrency: string | null;
 };
 
+export type DetectionSource = ExistingSub["detectionSource"];
+
+/**
+ * Maps a transaction origin to the subscription `detection_source` values the schema allows.
+ * Bank-like feeds (mock bank, aggregator, simulated) count as `mock_bank`; csv and email keep
+ * their own; user-entered or document-derived rows are `manual`.
+ */
+export function detectionSourceFor(origin: string | undefined): DetectionSource {
+  switch (origin) {
+    case "csv":
+      return "csv";
+    case "email":
+      return "email";
+    case "user":
+    case "document":
+      return "manual";
+    default:
+      return "mock_bank";
+  }
+}
+
 export type SubInsert = {
   merchantId: string;
   cycleDays: number;
@@ -29,6 +50,7 @@ export type SubInsert = {
   lastCharged: string;
   confidence: number;
   sourceId: string;
+  detectionSource: DetectionSource;
 };
 
 export type SubUpdate = {
@@ -84,6 +106,7 @@ export function planSubscriptionUpserts(input: {
         lastCharged: det.lastCharged,
         confidence: det.confidence,
         sourceId: `detect:${merchantId}`,
+        detectionSource: detectionSourceFor(last.origin),
       });
     } else if (sub.detectionSource === "mock_bank" && (sub.status === "active" || sub.status === "inactive")) {
       updates.push({ id: sub.id, status, lastCharged: det.lastCharged, nextRenewal: det.nextExpected, confidence: det.confidence });

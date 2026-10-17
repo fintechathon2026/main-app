@@ -11,8 +11,8 @@ export async function applyDetectPlan(q: Queryable, userId: string, plan: Pick<D
     await q.query(
       `insert into public.subscriptions (user_id, merchant_id, cycle_days, amount, currency, billing_currency,
          original_amount, next_renewal, status, first_seen, last_charged, confidence, detection_source, source_id)
-       values ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::date, $11::date, $12, 'mock_bank', $13)`,
-      [userId, s.merchantId, s.cycleDays, s.amount, s.currency, s.billingCurrency, s.originalAmount, s.nextRenewal, s.status, s.firstSeen, s.lastCharged, s.confidence, s.sourceId],
+       values ($1, $2, $3, $4, $5, $6, $7, $8::date, $9, $10::date, $11::date, $12, $14, $13)`,
+      [userId, s.merchantId, s.cycleDays, s.amount, s.currency, s.billingCurrency, s.originalAmount, s.nextRenewal, s.status, s.firstSeen, s.lastCharged, s.confidence, s.sourceId, s.detectionSource],
     );
   }
   for (const u of plan.updates) {

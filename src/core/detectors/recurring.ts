@@ -22,6 +22,8 @@ export type ChargeTx = {
   amount: number; // positive charge in the account (base) currency
   originalAmount?: number | null;
   originalCurrency?: string | null;
+  /** Origin of the source transaction (public.transactions.origin). */
+  origin?: string;
 };
 
 /** Base-currency units per 1 unit of `currency` on `date`, or null if unknown. */

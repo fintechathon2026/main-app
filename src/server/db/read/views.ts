@@ -87,6 +87,7 @@ export function chargesByMerchant(txs: readonly TransactionRow[]): Map<string, C
       amount: -t.amount,
       originalAmount: t.original_amount === null ? null : Math.abs(t.original_amount),
       originalCurrency: t.original_currency,
+      origin: t.origin,
     });
     m.set(t.merchant_id, list);
   }

@@ -49,11 +49,36 @@ function recorder(rows: unknown[][] = []): Queryable & { calls: { text: string; 
   };
 }
 
+describe("detection source", () => {
+  const withOrigin = (origin: string): ChargeTx[] => monthly("2026-07-01", 4, 19).map((c) => ({ ...c, origin }));
+  const insertFor = (origin: string) =>
+    planSubscriptionUpserts({ charges: new Map([["m", withOrigin(origin)]]), existing: [], baseCurrency: "CNY", now: NOW }).inserts[0];
+
+  it.each([
+    ["mock_bank", "mock_bank"],
+    ["csv", "csv"],
+    ["email", "email"],
+    ["user", "manual"],
+  ])("derives detection_source from the transactions' origin: %s -> %s", (origin, expected) => {
+    expect(insertFor(origin).detectionSource).toBe(expected);
+  });
+
+  it("writes the derived source instead of a constant", async () => {
+    const q = recorder();
+    await applyDetectPlan(q, LIN, {
+      inserts: [{ ...insertFor("csv") }],
+      updates: [],
+    });
+    expect(q.calls[0].text).not.toContain("'mock_bank'");
+    expect(q.calls[0].values).toContain("csv");
+  });
+});
+
 describe("detect store", () => {
   it("writes inserts with user id and updates scoped to mock_bank rows", async () => {
     const q = recorder();
     await applyDetectPlan(q, LIN, {
-      inserts: [{ merchantId: "m", cycleDays: 30, amount: 19, currency: "CNY", billingCurrency: "CNY", originalAmount: 19, nextRenewal: "2026-11-01", status: "active", firstSeen: "2026-07-01", lastCharged: "2026-10-01", confidence: 0.9, sourceId: "detect:m" }],
+      inserts: [{ merchantId: "m", cycleDays: 30, amount: 19, currency: "CNY", billingCurrency: "CNY", originalAmount: 19, nextRenewal: "2026-11-01", status: "active", firstSeen: "2026-07-01", lastCharged: "2026-10-01", confidence: 0.9, sourceId: "detect:m", detectionSource: "mock_bank" }],
       updates: [{ id: "s1", status: "inactive", lastCharged: "2026-08-01", nextRenewal: "2026-08-31", confidence: 0.8 }],
     });
     expect(q.calls[0].values?.[0]).toBe(LIN);
