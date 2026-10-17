@@ -223,8 +223,9 @@ function payBill(t: Trace, snap: GateSnapshot, policy: Policy, amount: number, b
     amountBase = Math.ceil(amount * snap.fx.rate * (1 + policy.fx.margin_pct / 100));
   }
 
-  // 8. Anomaly (computed once; also used by the conditional-origin provenance rule)
-  const anomaly = anomalyVerdict(amountBase, snap.history.amounts, policy);
+  // 8. Anomaly (computed once; also used by the conditional-origin provenance rule).
+  // History is in the bill's own currency (snapshot), so compare the unconverted amount.
+  const anomaly = anomalyVerdict(amount, snap.history.amounts, policy);
   const overAutoPay = amountBase > policy.bills.auto_pay_max;
 
   // 4 (cont.) amount origin

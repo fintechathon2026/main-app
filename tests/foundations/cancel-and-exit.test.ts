@@ -115,12 +115,15 @@ describe.skipIf(!DB_ENABLED)("foundations: cancel and prepaid exit", () => {
     return { u, planId, merchantId, chainPlanId };
   }
 
-  it("prepaid exit without an attestation needs approval", async () => {
-    const { u, planId } = await prepaidUser();
+  it("prepaid exit without an attestation or consumer signature is denied (voluntary-exit flow)", async () => {
+    const { u, planId, chainPlanId } = await prepaidUser();
     const id = await plan(u.id, "prepaid_exit", { plan_id: planId }, "prepaid_risk");
     const r = await executor.run(id, u.id);
-    expect(r.status).toBe("awaiting_approval");
+    expect(r.status).toBe("denied");
     expect(r.gate?.ruleIds).toContain("prepaid.auto_exit_on");
+    expect(r.gate?.reasons).toContain("prepaid.exit_use_voluntary_flow");
+    const ep = await admin.query("select status from mockbank.escrow_plans where chain_plan_id = $1", [chainPlanId]);
+    expect(ep.rows[0].status).toBe("active");
   });
 
   it("attested prepaid exit refunds the owner on the mock escrow", async () => {

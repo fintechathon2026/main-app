@@ -189,8 +189,9 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         if (!ids) throw new SettlementError("plan_not_found", true);
         if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
         const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
-        // Approved path: the approval sheet stands in for the voluntary-exit signature (MOCK ONLY;
-        // on chain this needs the consumer's exitVoluntaryBySig signature).
+        // Approved path: the Gate only upgrades an unattested exit to allow when the consumer's
+        // voluntary-exit signature verified (consumerSigValid) and an approval is valid. MOCK
+        // escrow: on chain this sends the consumer's exitVoluntaryBySig signature.
         const res = approved
           ? await escrow.exitVoluntary({ chainPlanId: ids.chain_plan_id }, sendOpts)
           : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId! }, sendOpts);

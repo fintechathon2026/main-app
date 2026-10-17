@@ -217,6 +217,17 @@ describe("decide: amount, FX, anomaly, caps, approval", () => {
     expect(r.trace.find((x) => x.ruleId === "fx.rate_fresh")?.result).toBe("allow");
   });
 
+  it("compares a foreign bill with history in its own currency, not the converted amount", () => {
+    const r = decide(pay(20), snap({ fx: { rate: 7.1, date: "2026-10-16", source: "fx_provider" }, history: { amounts: [20, 20, 20, 20, 20] } }));
+    expect(r.trace.find((x) => x.ruleId === "bills.anomaly")?.result).toBe("allow");
+    expect(r.amountBase).toBe(Math.ceil(20 * 7.1 * 1.03));
+  });
+
+  it("flags a foreign bill that is anomalous in its own currency", () => {
+    const r = decide(pay(40), snap({ fx: { rate: 7.1, date: "2026-10-16", source: "fx_provider" }, history: { amounts: [20, 20, 20, 20, 20] } }));
+    expect(r.trace.find((x) => x.ruleId === "bills.anomaly")?.result).toBe("require_confirm");
+  });
+
   it("denies a stale FX rate", () => {
     const r = decide(pay(20), snap({ fx: { rate: 7.1, date: "2026-10-10", source: "fx_provider" }, history: { amounts: [147, 147, 147] } }));
     expect(r.decision).toBe("deny");

@@ -144,9 +144,9 @@ async function payBillFacts(
 
   const hist = await tx.query(
     `select amount::int as amount from public.bills
-      where user_id = $1 and biller_id = $2 and id <> $3 and status <> 'cancelled'
+      where user_id = $1 and biller_id = $2 and id <> $3 and status <> 'cancelled' and currency = $4
       order by due_date desc limit 12`,
-    [userId, bill.biller_id, bill.id],
+    [userId, bill.biller_id, bill.id, bill.currency],
   );
   snap.history = { amounts: hist.rows.map((r) => r.amount as number) };
 
