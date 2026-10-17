@@ -209,7 +209,7 @@ export type Harness = {
   config: { configurable: { thread_id: string; deps: AgentDeps }; recursionLimit: number };
 };
 
-const noReader: DocumentReaderPort = { read: async () => [] };
+const noReader: DocumentReaderPort = { read: async () => [], markStatus: async () => {} };
 const noSignals: SignalReaderPort = { read: async () => null };
 
 export type HarnessOptions = {

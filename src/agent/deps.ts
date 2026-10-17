@@ -45,7 +45,11 @@ export type AuditRow = {
 export interface DocumentReaderPort {
   /** Runs the quarantined Reader on one document; every field labeled origin=document. */
   read(documentId: string, userId: string): Promise<Labeled<unknown>[]>;
+  /** Records the processing outcome on the document row (`parsed` or `needs_review`). */
+  markStatus(documentId: string, userId: string, status: DocumentStatus): Promise<void>;
 }
+
+export type DocumentStatus = "parsed" | "needs_review";
 
 export interface SignalReaderPort {
   /** Runs the quarantined Signal Reader for one merchant; output is a warning only. */

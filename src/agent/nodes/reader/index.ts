@@ -18,5 +18,8 @@ export function createDocumentReader(deps: ReaderDeps): DocumentReaderPort {
       const result = await graph.invoke({ documentId }, { configurable: { userId } });
       return result.fields;
     },
+    async markStatus(documentId, userId, status) {
+      await deps.markStatus?.(documentId, userId, status);
+    },
   };
 }

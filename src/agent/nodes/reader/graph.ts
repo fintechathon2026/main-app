@@ -27,6 +27,8 @@ export type ReaderDeps = {
   loadDocument(documentId: string, userId: string): Promise<LoadedDocument>;
   /** Persists the token map server-side (architecture §10.2). Never passed to a model. */
   savePiiMap?(input: { documentId: string; userId: string; map: PiiMap }): Promise<void>;
+  /** Persists the document's processing status (user-scoped). Optional; absent -> no-op. */
+  markStatus?(documentId: string, userId: string, status: "parsed" | "needs_review"): Promise<void>;
   maxInputChars?: number;
 };
 

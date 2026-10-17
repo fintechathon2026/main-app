@@ -5,6 +5,7 @@
 
 import { UNTRUSTED_ORIGINS, type Labeled, type Origin } from "@/src/core/types";
 import type { NodeFn } from "./graph-state";
+import { ReaderInvalidOutput } from "./reader/errors";
 import { getDeps } from "./graph-state";
 
 function keepUntrusted<T>(item: Labeled<T>, fallback: Origin, sourceId: string): Labeled<T> {
@@ -17,7 +18,16 @@ export const readDocuments: NodeFn = async (state, config) => {
   const { reader } = getDeps(config);
   const extracted: Labeled<unknown>[] = [];
   for (const documentId of state.documentIds) {
-    const fields = await reader.read(documentId, state.userId);
+    let fields: Labeled<unknown>[];
+    try {
+      fields = await reader.read(documentId, state.userId);
+    } catch (e) {
+      if (!(e instanceof ReaderInvalidOutput)) throw e;
+      // Unreadable document: the plan continues without its fields and the user is told to review.
+      await reader.markStatus(documentId, state.userId, "needs_review");
+      continue;
+    }
+    await reader.markStatus(documentId, state.userId, "parsed");
     for (const f of fields) extracted.push(keepUntrusted(f, "document", documentId));
   }
   return { extracted };

@@ -19,6 +19,7 @@ export interface DocumentRepo {
     retentionUntil: Date;
   }): Promise<{ id: string; created: boolean }>;
   get(documentId: string, userId: string): Promise<DocumentRow | null>;
+  setStatus(documentId: string, userId: string, status: "parsed" | "needs_review"): Promise<void>;
 }
 
 export function createPgDocumentRepo(): DocumentRepo {
@@ -48,6 +49,11 @@ export function createPgDocumentRepo(): DocumentRepo {
         );
         if (!existing.rows[0]) throw new Error("document insert conflicted but no row is visible");
         return { id: existing.rows[0].id, created: false };
+      });
+    },
+    setStatus(documentId, userId, status) {
+      return withUserTx(userId, async (tx) => {
+        await tx.query("update public.documents set status = $3 where id = $1 and user_id = $2", [documentId, userId, status]);
       });
     },
     get(documentId, userId) {

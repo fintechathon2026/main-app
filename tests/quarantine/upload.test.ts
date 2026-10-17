@@ -38,6 +38,7 @@ function memoryRepo(): DocumentRepo & { rows: DocumentRow[] } {
     async get(documentId, userId) {
       return rows.find((r) => r.id === documentId && r.userId === userId) ?? null;
     },
+    async setStatus() {},
   };
 }
 

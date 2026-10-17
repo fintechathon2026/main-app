@@ -112,3 +112,34 @@ describe.skipIf(!DB_ENABLED)("plans: paused plans whose approvals expired", () =
     }
   });
 });
+
+describe.skipIf(!DB_ENABLED)("documents: processing status", () => {
+  let admin: Pool;
+
+  beforeAll(() => {
+    admin = adminPool();
+  });
+
+  afterAll(async () => {
+    await admin.end();
+    await getPool().end();
+    setPool(null);
+  });
+
+  it("setStatus records the reader outcome on the user's own document", async () => {
+    const { createPgDocumentRepo } = await import("@/src/server/ingest/repo");
+    const u = await createTestUser(admin, []);
+    const repo = createPgDocumentRepo();
+    const { id } = await repo.insertIdempotent({
+      userId: u.id,
+      type: "bill_pdf",
+      storageRef: "local:test",
+      sha256: `status-${u.id}`,
+      receivedAt: new Date(),
+      retentionUntil: new Date(Date.now() + 86_400_000),
+    });
+    await repo.setStatus(id, u.id, "needs_review");
+    const r = await admin.query("select status from public.documents where id = $1", [id]);
+    expect(r.rows[0].status).toBe("needs_review");
+  });
+});

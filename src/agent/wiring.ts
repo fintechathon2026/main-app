@@ -34,6 +34,7 @@ let graph: AgentGraph | null = null;
 export function getAgentDeps(): AgentDeps {
   if (!deps) {
     const models = createModelClients();
+    const documentRepo = createPgDocumentRepo();
     deps = {
       models,
       readTools,
@@ -41,9 +42,10 @@ export function getAgentDeps(): AgentDeps {
       executor: getExecutor(),
       reader: createDocumentReader({
         models,
+        markStatus: (documentId, userId, status) => documentRepo.setStatus(documentId, userId, status),
         // Server-side job: no user token. The backend is picked per load from the storage_ref
         // prefix, so constructing deps never fails on storage configuration.
-        loadDocument: createDocumentLoader({ repo: createPgDocumentRepo(), storage: createServerDocumentStorage() }),
+        loadDocument: createDocumentLoader({ repo: documentRepo, storage: createServerDocumentStorage() }),
       }),
       signalReader: createSignalReader({
         models,

@@ -2,6 +2,7 @@ import { Command } from "@langchain/langgraph";
 import { describe, expect, it } from "vitest";
 import { RecordedModelClient, RecordingMissError } from "@/src/agent/models/recorded";
 import type { ChatMessage, ChatResponse } from "@/src/agent/models/types";
+import { ReaderInvalidOutput } from "@/src/agent/nodes/reader/errors";
 import { idempotencyKey } from "@/src/agent/nodes/persist_plan";
 import { CONTEXT_KEY, PLANNER_SYSTEM } from "@/src/agent/prompts/planner";
 import { PLAN, USER, harnessWith, initialInput, recordThenReplay, warningOf, type Harness } from "./fakes";
@@ -195,6 +196,7 @@ describe("agent graph: untrusted content isolation (H5)", () => {
 
   it("canary from a document reaches the Planner only inside labeled JSON data", async () => {
     const reader = {
+      markStatus: async () => {},
       read: async (documentId: string) => [
         { value: { biller_name: "PLN", amount: 120 }, origin: "document" as const, sourceId: documentId },
         // A port bug or a malicious field must not upgrade the label.
@@ -229,6 +231,33 @@ describe("agent graph: untrusted content isolation (H5)", () => {
       // The instruction-carrying parts of the context never contain it.
       expect(JSON.stringify(payload[CONTEXT_KEY])).not.toContain(CANARY);
     }
+  });
+
+  it("an unreadable document is marked needs_review and the plan continues without its fields", async () => {
+    const marks: [string, string][] = [];
+    const reader = {
+      markStatus: async (documentId: string, _userId: string, status: string) => {
+        marks.push([documentId, status]);
+      },
+      read: async (documentId: string) => {
+        if (documentId === "doc_bad") throw new ReaderInvalidOutput(documentId, "schema", ["amount:invalid_type"]);
+        return [{ value: { biller_name: "PLN" }, origin: "document" as const, sourceId: documentId }];
+      },
+    };
+    const h = await recordThenReplay(
+      { planner: [say("One document could not be read; please review it.")] },
+      async (h) => {
+        await start(h, "handle my uploads", { documentIds: ["doc_bad", "doc_ok"] });
+      },
+      { reader },
+    );
+    expect(marks.slice(-2)).toEqual([
+      ["doc_bad", "needs_review"],
+      ["doc_ok", "parsed"],
+    ]);
+    const state = (await h.graph.getState(h.config)).values;
+    expect(state.extracted).toHaveLength(1);
+    expect(state.extracted[0].sourceId).toBe("doc_ok");
   });
 
   it("signal reader warnings stay labeled and never create actions", async () => {
