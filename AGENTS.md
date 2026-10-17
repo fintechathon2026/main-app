@@ -81,14 +81,38 @@ Node 22, pnpm 11. Copy `.env.example` to `.env.local` first.
 
 | Command | Does |
 |---|---|
-| `pnpm install` | Install dependencies (exact versions, lockfile committed) |
 | `pnpm dev` | Next.js dev server |
 | `pnpm lint` | ESLint, including the module-boundary rules |
-| `pnpm typecheck` | `next typegen` + `tsc --noEmit` |
-| `pnpm test` | Vitest (`src/**/*.test.ts`, `tests/**/*.test.ts`) |
-| `forge test` | Contract tests, from `contracts/` |
+| `pnpm typecheck` | `next typegen` + `tsc --noEmit` (run `next typegen` first, or `LayoutProps` types are missing) |
+| `pnpm test` | Vitest, all suites |
+| `pnpm vitest run tests/harness/resume.test.ts` | One file; add `-t "name"` for one test |
+| `pnpm db:checkpointer` | Create LangGraph checkpoint tables (admin connection; grants the app role) |
+| `forge test` | Contract tests, from `contracts/` (not built yet) |
 
-Local Supabase and the eval runner are added when they land.
+**Database tests.** Many suites (`tests/foundations`, `tests/e2e`, `tests/harness`, `tests/risk`, `tests/read`) need local Supabase and are skipped when `DATABASE_URL` is unset. Run them with the env loaded:
+
+```bash
+pnpm exec supabase start            # Docker; slow the first time
+pnpm exec supabase db reset         # applies supabase/migrations + supabase/seed.sql (demo user Lin)
+set -a; . ./.env.local; set +a; pnpm test
+```
+
+`.env.local` (gitignored) holds the local `DATABASE_URL` (role `reins_server`), `MOCKBANK_DATABASE_URL`, `TEST_ADMIN_DATABASE_URL`, `MOCKBANK_API_KEY`, `AGENT_ADDRESS`, `ORACLE_ADDRESS`. Never edit an applied migration; add a new file and run `pnpm exec supabase migration up`. Do not `db reset` while another session is running tests.
+
+**Demo recordings.** `REINS_MODELS=recorded` replays `evals/recordings/demo_lin/` (keys are hashes of the exact model request, so any prompt, tool-list or context change makes them miss). Regenerate with `node --env-file=.env.local --experimental-transform-types scripts/record-demo.ts`; see `evals/README.md`.
+
+## Architecture (big picture)
+
+Read `docs/architecture.md` for detail. The shape that needs several files to see:
+
+- **One door for side effects.** The LangGraph agent (`src/agent/graph.ts`) only *proposes*. Side-effecting tool calls (`pay_bill`, `cancel_subscription`, `prepaid_exit`) are captured by the planner, validated and persisted as `actions` rows by `persist_plan` (`args_hash = actionHash(tool, args)`, deterministic idempotency key), then run by the `execute` node calling `ActionExecutor.run` (`src/server/executor/run.ts`). The executor is the only code that imports settlement adapters (ESLint-enforced). Phase B takes the `daily_limits` row lock, builds a snapshot from DB rows (`snapshot.ts`), calls the pure Gate `decide()` (`src/core/gate`), reserves caps and consumes the approval in one transaction. Phase C calls the adapter outside any transaction.
+- **Authority is in Postgres, not in the graph.** `await_approval` holds only `interrupt()`. Approvals are hash-bound rows; resume payloads and checkpoints carry no authority. `/api/agent/resume` takes only `{planId}` and checks ownership.
+- **Quarantine.** Untrusted text goes through the Reader / Signal Reader subgraphs (`src/agent/nodes/reader`, `signal_reader`): no tools, state disjoint from the planner's, PII redacted first, output is zod-validated `Labeled<T>` with `origin` document/web. The planner only sees it as origin-labelled JSON. Provenance for decisions is re-derived server-side from bill, biller and attestation rows, never from LLM arguments.
+- **Dependency injection.** The graph gets everything through `config.configurable.deps` (`src/agent/deps.ts`: models, read tools, `PlanStore`, executor, readers). `src/agent/wiring.ts` builds the real ones; tests build fakes (`tests/agent/fakes.ts`). `ModelClient` has live, recorded and recording implementations (`src/agent/models`).
+- **Pure core.** `src/core/**` has no I/O, clock, randomness or env (ESLint-enforced): Gate, mandate schema and hashing, detectors, advisor and summary algorithms. The same view builders (`src/server/db/read/views.ts`) feed both agent read tools and the UI routes, so numbers match. UI response types are in `src/server/api-types.ts` with fixtures in `fixtures/api/` (`REINS_FIXTURES=1` serves them without a DB).
+- **Data.** Supabase Postgres: `public` (RLS on every user-scoped table; `reins_server` has no BYPASSRLS and sets `app.user_id` per transaction via `withUserTx`), `langgraph` (checkpoints), `mockbank` (separate role, reached over HTTP at `/mockbank/*`), `eval`. The audit log is append-only and hash-chained per user.
+- **Prepaid escrow.** Currently mocked (`REINS_ESCROW=mock`): the mock bank holds plans and `prepaid_exit` refunds the owner only. Attestations come from the registry simulator (`src/sim/registry`, `app/sim/registry`) signed with the oracle key (EIP-712, `src/sim/registry/eip712.ts`); the Gate and executor re-verify signatures. `src/sim/**` plays an outside party and must not import executor, agent or adapters. The Solidity contract and chain adapter are R3's and not built.
+- **Ownership.** Some modules are minimal versions written by R1 for R2/R3 (file headers say "Owner: R2|R3 … Minimal version by R1"); see the R1 note in `task.md`.
 
 ## Next.js 16
 
