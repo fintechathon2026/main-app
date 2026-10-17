@@ -365,6 +365,17 @@ function prepaidExit(t: Trace, snap: GateSnapshot, policy: Policy) {
     t.add("provenance.prepaid_plan", "deny", "prepaid.plan_unknown");
     return;
   }
+  // The plan must be active, owned by the user's wallet, and name our agent; nothing (not even
+  // an approval) can make an exit of someone else's or a finished plan acceptable.
+  if (!ok) {
+    t.add("prepaid.exit_plan", "deny", "prepaid.plan_not_owned_or_inactive");
+    return;
+  }
+  if (f.agentIsOurs !== true) {
+    t.add("prepaid.exit_plan", "deny", "prepaid.agent_not_ours");
+    return;
+  }
+  t.add("prepaid.exit_plan", "allow");
   const a = f.attestation;
   const attOk =
     !!a &&
@@ -374,9 +385,18 @@ function prepaidExit(t: Trace, snap: GateSnapshot, policy: Policy) {
     a.ageDays >= 0 &&
     a.ageDays <= policy.prepaid.attestation_max_age_days &&
     policy.prepaid.auto_exit_on.includes(a.kind);
-  const allOk = ok && f.agentIsOurs === true && attOk;
-  // Otherwise require_confirm: the approval sheet collects a voluntary-exit signature.
-  t.add("prepaid.auto_exit_on", allOk ? "allow" : "require_confirm", allOk ? undefined : "prepaid.exit_needs_confirm");
+  if (attOk) {
+    t.add("prepaid.auto_exit_on", "allow");
+    return;
+  }
+  // No valid attestation: the exit is a fee-bearing voluntary exit, which needs the consumer's
+  // own signature. With it, one approval may confirm; without it, deny and point the user to the
+  // voluntary-exit flow (an approval alone must never move escrowed money).
+  if (f.consumerSigValid === true) {
+    t.add("prepaid.auto_exit_on", "require_confirm", "prepaid.exit_needs_confirm");
+  } else {
+    t.add("prepaid.auto_exit_on", "deny", "prepaid.exit_use_voluntary_flow");
+  }
 }
 
 function prepaidExitVoluntary(t: Trace, snap: GateSnapshot) {

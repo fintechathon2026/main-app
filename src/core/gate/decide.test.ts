@@ -334,23 +334,29 @@ describe("decide: prepaid (architecture §24.9)", () => {
       over: { caps: { dailyUsed: 950, dailyCap: 1000 } },
     },
     { name: "attested exit, all valid", action: exit, facts: base({ agentIsOurs: true, attestation }), expected: "allow", rule: "prepaid.auto_exit_on" },
-    { name: "exit, no attestation", action: exit, facts: base({ agentIsOurs: true, attestation: null }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
-    { name: "exit, signer not oracle", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, signerIsOracle: false } }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
-    { name: "exit, other merchant", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, merchantMatches: false } }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
-    { name: "exit, stale attestation", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, ageDays: 3 } }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
-    { name: "exit, expired attestation", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, expired: true } }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
+    // Without a valid attestation the exit is voluntary: deny unless the consumer signed it.
+    { name: "exit, no attestation, unsigned", action: exit, facts: base({ agentIsOurs: true, attestation: null }), expected: "deny", rule: "prepaid.auto_exit_on" },
+    { name: "exit, no attestation, consumer signed", action: exit, facts: base({ agentIsOurs: true, attestation: null, consumerSigValid: true }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
+    { name: "exit, signer not oracle", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, signerIsOracle: false } }), expected: "deny", rule: "prepaid.auto_exit_on" },
+    { name: "exit, signer not oracle, consumer signed", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, signerIsOracle: false }, consumerSigValid: true }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
+    { name: "exit, other merchant", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, merchantMatches: false } }), expected: "deny", rule: "prepaid.auto_exit_on" },
+    { name: "exit, stale attestation", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, ageDays: 3 } }), expected: "deny", rule: "prepaid.auto_exit_on" },
+    { name: "exit, expired attestation", action: exit, facts: base({ agentIsOurs: true, attestation: { ...attestation, expired: true } }), expected: "deny", rule: "prepaid.auto_exit_on" },
     {
       name: "exit, kind not in auto_exit_on",
       action: exit,
       facts: base({ agentIsOurs: true, attestation: { ...attestation, kind: "closure_notice" } }),
-      expected: "require_confirm",
+      expected: "deny",
       rule: "prepaid.auto_exit_on",
       patch: (p) => {
         (p.prepaid as Record<string, unknown>).auto_exit_on = ["court_enforcement"];
       },
     },
-    { name: "exit, agent not ours", action: exit, facts: base({ agentIsOurs: false, attestation }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
-    { name: "exit, owner is not the user", action: exit, facts: base({ ownerWallet: AGENT, agentIsOurs: true, attestation }), expected: "require_confirm", rule: "prepaid.auto_exit_on" },
+    // The plan itself must be ours: deny, even with a consumer signature or an approval.
+    { name: "exit, agent not ours", action: exit, facts: base({ agentIsOurs: false, attestation }), expected: "deny", rule: "prepaid.exit_plan" },
+    { name: "exit, agent not ours, consumer signed", action: exit, facts: base({ agentIsOurs: false, attestation: null, consumerSigValid: true }), expected: "deny", rule: "prepaid.exit_plan" },
+    { name: "exit, owner is not the user", action: exit, facts: base({ ownerWallet: AGENT, agentIsOurs: true, attestation }), expected: "deny", rule: "prepaid.exit_plan" },
+    { name: "exit, inactive plan", action: exit, facts: base({ plan: { ...plan, status: "exited_voluntary" }, agentIsOurs: true, attestation, consumerSigValid: true }), expected: "deny", rule: "prepaid.exit_plan" },
     { name: "exit, unknown plan", action: exit, facts: base({ plan: null }), expected: "deny", rule: "provenance.prepaid_plan" },
     { name: "voluntary exit, signed", action: voluntary, facts: base({ actor: "user", consumerSigValid: true }), expected: "allow", rule: "prepaid.exit_voluntary" },
     { name: "voluntary exit, unsigned", action: voluntary, facts: base({ actor: "user", consumerSigValid: false }), expected: "deny", rule: "prepaid.exit_voluntary" },
@@ -361,6 +367,20 @@ describe("decide: prepaid (architecture §24.9)", () => {
     expect(r.decision).toBe(expected);
     expect(r.trace.some((x) => x.ruleId === rule)).toBe(true);
     if (expected !== "allow") expect(r.ruleIds).toContain(rule);
+  });
+
+  it("an approval never turns an unsigned, unattested exit into allow", () => {
+    const r = decide(exit, snap({ prepaid: base({ agentIsOurs: true, attestation: null }), approval: { valid: true } }));
+    expect(r.decision).toBe("deny");
+    expect(r.reasons).toContain("prepaid.exit_use_voluntary_flow");
+    const other = decide(exit, snap({ prepaid: base({ ownerWallet: AGENT, agentIsOurs: true, attestation: null, consumerSigValid: true }), approval: { valid: true } }));
+    expect(other.decision).toBe("deny");
+  });
+
+  it("an approval with the consumer's signature confirms a voluntary-style exit", () => {
+    const r = decide(exit, snap({ prepaid: base({ agentIsOurs: true, attestation: null, consumerSigValid: true }), approval: { valid: true } }));
+    expect(r.decision).toBe("allow");
+    expect(r.ruleIds).toContain("approval.valid");
   });
 
   it("kill switch denies every prepaid action", () => {
