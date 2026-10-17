@@ -10,7 +10,7 @@ import type { ActionExecutorPort, ExecResult, GateResult } from "@/src/core/type
 import { decide } from "@/src/core/gate/decide";
 import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
-import { consumeApproval, expireOpenApprovalsFor } from "@/src/server/approvals";
+import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
 import {
@@ -120,6 +120,9 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
           JSON.stringify(gate),
         ]);
         if (status === "denied") await expireOpenApprovalsFor(tx, userId, [actionId], "denied");
+        // The user needs a card to act on, whether or not preview routed here first. Re-uses
+        // the action's open approval if one exists.
+        else await createApprovalTx(tx, userId, actionId);
         return { kind: "stop", res: { actionId, status, gate } };
       }
 

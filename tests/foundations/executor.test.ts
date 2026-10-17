@@ -111,6 +111,20 @@ describe.skipIf(!DB_ENABLED)("foundations: executor against Postgres + mock bank
     expect(await payments(u.bills.power)).toHaveLength(1);
   });
 
+  it("execution that needs confirmation creates the approval itself, even when preview said allow", async () => {
+    const u = await createTestUser(admin, [{ biller: "SZ_POWER", amount: 612, key: "power" }]);
+    const { ids } = await planPayments(store, u.id, [{ billId: u.bills.power, billerId: "SZ_POWER", amount: 612 }]);
+    // Preview recorded allow (e.g. before the bill or limits changed); no approval row exists.
+    await admin.query("update public.actions set preview_decision = 'allow', status = 'ready' where id = $1", [ids[0]]);
+    const r = await executor.run(ids[0], u.id);
+    expect(r.status).toBe("awaiting_approval");
+    const ap = await admin.query("select status from public.approvals where action_id = $1", [ids[0]]);
+    expect(ap.rows.map((x) => x.status)).toEqual(["pending"]);
+    // A second run reuses the open approval instead of piling up cards.
+    await executor.run(ids[0], u.id);
+    expect((await admin.query("select 1 from public.approvals where action_id = $1", [ids[0]])).rowCount).toBe(1);
+  });
+
   it("a rejected approval never executes", async () => {
     const u = await createTestUser(admin, [{ biller: "SZ_POWER", amount: 612, key: "power" }]);
     const { ids } = await planPayments(store, u.id, [{ billId: u.bills.power, billerId: "SZ_POWER", amount: 612 }]);
