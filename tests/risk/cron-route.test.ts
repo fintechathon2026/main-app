@@ -2,8 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const job = vi.hoisted(() => ({ runRiskJobRecorded: vi.fn() }));
 vi.mock("@/src/server/risk", async () => {
-  const auth = await import("@/src/server/risk/auth");
-  return { cronAuthorized: auth.cronAuthorized, runRiskJobRecorded: job.runRiskJobRecorded };
+  return { runRiskJobRecorded: job.runRiskJobRecorded };
 });
 
 const { GET, POST } = await import("@/app/api/cron/risk/route");
@@ -28,6 +27,12 @@ describe("/api/cron/risk", () => {
       expect((await GET(req(auth))).status).toBe(401);
       expect((await POST(req(auth, "POST"))).status).toBe(401);
     }
+    expect(job.runRiskJobRecorded).not.toHaveBeenCalled();
+  });
+
+  it("rejects a short CRON_SECRET even when the caller presents it", async () => {
+    process.env.CRON_SECRET = "short";
+    expect((await GET(req("Bearer short"))).status).toBe(401);
     expect(job.runRiskJobRecorded).not.toHaveBeenCalled();
   });
 

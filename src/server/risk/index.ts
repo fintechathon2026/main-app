@@ -9,7 +9,6 @@ import { runRiskJob, type RiskJobDeps, type RiskJobStats } from "./job";
 
 export { runRiskJob, type RiskJobDeps, type RiskJobStats, type RiskRepo, type RegistryClient } from "./job";
 export { AttestationWire, freshness, recoverAttestationSigner, verifyAttestation, CONTRACT_MAX_AGE_DAYS } from "./attestation";
-export { cronAuthorized } from "./auth";
 export { createHttpRegistryClient } from "./registry-client";
 export { createPgRiskRepo } from "./repo";
 

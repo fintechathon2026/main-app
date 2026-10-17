@@ -2,10 +2,11 @@
 // Bearer CRON_SECRET, constant-time compare. Attestations may start prepaid_risk plans; soft
 // signals only warn. No `runtime` export: cacheComponents is on, and Node is the default.
 
-import { cronAuthorized, runRiskJobRecorded } from "@/src/server/risk";
+import { verifyCronAuth } from "@/src/server/auth/cron";
+import { runRiskJobRecorded } from "@/src/server/risk";
 
 async function handle(req: Request): Promise<Response> {
-  if (!cronAuthorized(req)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!verifyCronAuth(req)) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
     const stats = await runRiskJobRecorded();
     return Response.json({ ok: stats.errors.length === 0, stats }, { headers: { "cache-control": "no-store" } });
