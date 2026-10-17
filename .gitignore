@@ -47,3 +47,6 @@ next-env.d.ts
 
 # local document storage (dev)
 /.data/
+
+# graphify output (local)
+graphify-out/
