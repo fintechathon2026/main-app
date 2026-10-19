@@ -93,7 +93,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Amounts, dates, rule ids and hashes line up in columns. */
+/* Amounts: UI font with tabular figures, so columns line up without looking like a terminal. */
+.amount {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+
+/* Rule ids, hashes and codes. */
 .num {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;

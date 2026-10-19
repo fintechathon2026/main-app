@@ -4,7 +4,7 @@
 // (no session, not built, offline) and a sample is given, shows the sample and says so on
 // screen. Samples are never used for actions: buttons always call the real route.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 export type Loaded<T> =
   | { state: "loading" }
@@ -58,4 +58,20 @@ export async function postJson<T>(url: string, body?: unknown): Promise<PostResu
   } catch {
     return { ok: false, status: 0 };
   }
+}
+
+/** Current time. Null while prerendering, so the server never reads the clock (cacheComponents). */
+let nowValue: Date | null = null;
+function subscribeNow(cb: () => void) {
+  const t = setInterval(() => {
+    nowValue = new Date();
+    cb();
+  }, 60_000);
+  return () => clearInterval(t);
+}
+const getNow = () => (nowValue ??= new Date());
+const getServerNow = () => null;
+
+export function useNow(): Date | null {
+  return useSyncExternalStore(subscribeNow, getNow, getServerNow);
 }

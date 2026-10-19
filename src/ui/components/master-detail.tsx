@@ -3,19 +3,22 @@
 // List + detail (docs/ui-direction.md §7). Desktop: the detail fills a right pane next to the
 // list. Mobile: the same detail opens as a bottom sheet. One component, CSS decides.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { BottomSheet } from "./overlay";
 
 export function MasterDetail({
   list,
   detail,
-  detailLabel,
+  detailKey,
+  detailLabel = "Details",
   onClose,
   placeholder,
 }: {
   list: ReactNode;
   detail: ReactNode | null;
-  detailLabel: string;
+  /** Changes when the selection changes, so the pane fades to the new item. */
+  detailKey: string;
+  detailLabel?: string;
   onClose: () => void;
   placeholder?: ReactNode;
 }) {
@@ -26,7 +29,7 @@ export function MasterDetail({
       <aside className="hidden lg:block" aria-label={detailLabel}>
         <div className="sticky top-8 max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-card border border-line bg-surface p-6">
           {detail ? (
-            <div key={detailLabel} className="anim-fade">
+            <div key={detailKey} className="anim-fade">
               {detail}
             </div>
           ) : (
@@ -42,14 +45,17 @@ export function MasterDetail({
 }
 
 /** True at 1024 px and up (Tailwind `lg`). False during server render. */
+const DESKTOP = "(min-width: 1024px)";
+function subscribeDesktop(cb: () => void) {
+  const mq = window.matchMedia(DESKTOP);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
 export function useIsDesktop(): boolean {
-  const [desktop, setDesktop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const update = () => setDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-  return desktop;
+  return useSyncExternalStore(
+    subscribeDesktop,
+    () => window.matchMedia(DESKTOP).matches,
+    () => false,
+  );
 }

@@ -36,7 +36,7 @@ export function Money({
 }) {
   const p = moneyParts(value, { decimals });
   return (
-    <span className={`num whitespace-nowrap ${MONEY_SIZE[size]} ${className}`}>
+    <span className={`amount whitespace-nowrap ${MONEY_SIZE[size]} ${className}`}>
       {p.sign}
       {p.symbol}
       {p.whole}
