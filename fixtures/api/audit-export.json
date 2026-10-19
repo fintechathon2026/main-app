@@ -1,0 +1,26 @@
+[
+  {
+    "seq": 1,
+    "createdAt": "2026-10-17T01:00:00.000Z",
+    "actor": "user",
+    "eventType": "kill_switch.changed",
+    "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "hash": "e9cead2b7e9909bccb25bf7d025ffb02c239f812b7cb22263b97f226fff08467",
+    "event": {
+      "enabled": true,
+      "previous": false
+    }
+  },
+  {
+    "seq": 2,
+    "createdAt": "2026-10-17T01:05:00.000Z",
+    "actor": "user",
+    "eventType": "kill_switch.changed",
+    "prevHash": "e9cead2b7e9909bccb25bf7d025ffb02c239f812b7cb22263b97f226fff08467",
+    "hash": "e6a237758a562820eaf3d02e43b0d889493c58e2c195ec8105b03ee4e86fe6d1",
+    "event": {
+      "enabled": false,
+      "previous": true
+    }
+  }
+]

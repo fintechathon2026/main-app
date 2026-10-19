@@ -1,0 +1,22 @@
+{
+  "profile": {
+    "email": "lin@demo.reins.local",
+    "displayName": "Lin",
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "baseCurrency": "CNY"
+  },
+  "killSwitch": {
+    "enabled": false,
+    "changedAt": "2026-10-17T01:05:00.000Z"
+  },
+  "mandateVersion": 3,
+  "dataSources": [
+    {
+      "id": "d0000000-0000-4000-8000-000000000001",
+      "type": "mock_bank",
+      "status": "active",
+      "lastSyncedAt": "2026-10-17T01:00:00.000Z"
+    }
+  ]
+}
