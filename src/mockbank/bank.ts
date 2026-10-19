@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getMockbankPool, mbTx } from "./db";
+import { parseSweepAmount } from "./money";
 
 export class MockbankError extends Error {
   constructor(
@@ -208,7 +209,9 @@ async function lockAccounts(tx: PoolClient, ids: string[]) {
  */
 export function transferInternal(customerId: string, req: { amount: number; idempotency_key: string }): Promise<MbResponse> {
   return idempotent(req.idempotency_key, "transfer_internal", async (tx) => {
-    if (!Number.isInteger(req.amount) || req.amount <= 0) throw new MockbankError(400, "invalid_request");
+    // numeric(14,2) text; all money arithmetic and comparisons happen in Postgres.
+    const amount = parseSweepAmount(req.amount);
+    if (!amount) throw new MockbankError(400, "invalid_request");
     const src = await tx.query("select id, name, currency from mockbank.accounts where customer_id = $1 and is_default", [customerId]);
     if (!src.rowCount) throw new MockbankError(422, "no_default_account");
     const from = src.rows[0];
@@ -221,28 +224,28 @@ export function transferInternal(customerId: string, req: { amount: number; idem
     if (!dst.rowCount) throw new MockbankError(422, "no_savings_account");
     const to = dst.rows[0];
     await lockAccounts(tx, [from.id, to.id]);
-    const bal = await tx.query("select balance from mockbank.accounts where id = $1", [from.id]);
-    if (Number(bal.rows[0].balance) < req.amount) throw new MockbankError(422, "insufficient_funds");
+    const bal = await tx.query("select balance >= $2::numeric as enough from mockbank.accounts where id = $1", [from.id, amount]);
+    if (!bal.rows[0].enough) throw new MockbankError(422, "insufficient_funds");
 
     const transferId = randomUUID();
-    await tx.query("update mockbank.accounts set balance = balance - $2 where id = $1", [from.id, req.amount]);
-    await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [to.id, req.amount]);
+    await tx.query("update mockbank.accounts set balance = balance - $2::numeric where id = $1", [from.id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2::numeric where id = $1", [to.id, amount]);
     await tx.query(
       `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
-       values ($1, now(), $3, $5, 'SWEEP TO SAVINGS'), ($2, now(), $4, $5, 'SWEEP FROM CHECKING')`,
-      [from.id, to.id, -req.amount, req.amount, from.currency],
+       values ($1, now(), -$3::numeric, $4, 'SWEEP TO SAVINGS'), ($2, now(), $3::numeric, $4, 'SWEEP FROM CHECKING')`,
+      [from.id, to.id, amount, from.currency],
     );
     const t = await tx.query(
       `insert into mockbank.transfers (id, idempotency_key, customer_id, from_account_id, to_account_id, amount, currency,
          status, reversible_until)
-       values ($1, $2, $3, $4, $5, $6, $7, 'succeeded', now() + interval '24 hours')
+       values ($1, $2, $3, $4, $5, $6::numeric, $7, 'succeeded', now() + interval '24 hours')
        returning reversible_until`,
-      [transferId, req.idempotency_key, customerId, from.id, to.id, req.amount, from.currency],
+      [transferId, req.idempotency_key, customerId, from.id, to.id, amount, from.currency],
     );
     const body = {
       transfer_id: transferId,
       status: "succeeded",
-      amount: req.amount,
+      amount: Number(amount),
       currency: from.currency,
       from_account: maskId(from.id),
       to_account: maskId(to.id),
@@ -257,7 +260,7 @@ export function transferInternal(customerId: string, req: { amount: number; idem
 export function reverseTransfer(customerId: string, transferId: string, idempotencyKey: string): Promise<MbResponse> {
   return idempotent(idempotencyKey, "transfer_reverse", async (tx) => {
     const r = await tx.query(
-      `select id, customer_id, from_account_id, to_account_id, amount, currency, status,
+      `select id, customer_id, from_account_id, to_account_id, amount::text as amount, currency, status,
               now() > reversible_until as expired
          from mockbank.transfers where id = $1 for update`,
       [transferId],
@@ -267,16 +270,16 @@ export function reverseTransfer(customerId: string, transferId: string, idempote
     if (t.status === "reversed") throw new MockbankError(409, "transfer_already_reversed");
     if (t.expired) throw new MockbankError(422, "reverse_window_expired");
     await lockAccounts(tx, [t.from_account_id, t.to_account_id]);
-    const amount = Number(t.amount);
-    const bal = await tx.query("select balance from mockbank.accounts where id = $1", [t.to_account_id]);
-    if (Number(bal.rows[0].balance) < amount) throw new MockbankError(422, "insufficient_funds");
+    const amount: string = t.amount; // numeric text; arithmetic and comparisons stay in Postgres
+    const bal = await tx.query("select balance >= $2::numeric as enough from mockbank.accounts where id = $1", [t.to_account_id, amount]);
+    if (!bal.rows[0].enough) throw new MockbankError(422, "insufficient_funds");
 
-    await tx.query("update mockbank.accounts set balance = balance - $2 where id = $1", [t.to_account_id, amount]);
-    await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [t.from_account_id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance - $2::numeric where id = $1", [t.to_account_id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2::numeric where id = $1", [t.from_account_id, amount]);
     await tx.query(
       `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
-       values ($1, now(), $3, $5, 'SWEEP REVERSED'), ($2, now(), $4, $5, 'SWEEP REVERSED')`,
-      [t.to_account_id, t.from_account_id, -amount, amount, t.currency],
+       values ($1, now(), -$3::numeric, $4, 'SWEEP REVERSED'), ($2, now(), $3::numeric, $4, 'SWEEP REVERSED')`,
+      [t.to_account_id, t.from_account_id, amount, t.currency],
     );
     const u = await tx.query(
       "update mockbank.transfers set status = 'reversed', reversed_at = now() where id = $1 returning reversed_at",
@@ -285,7 +288,7 @@ export function reverseTransfer(customerId: string, transferId: string, idempote
     const body = {
       transfer_id: t.id,
       status: "reversed",
-      amount,
+      amount: Number(t.amount),
       currency: t.currency,
       reversed_at: new Date(u.rows[0].reversed_at).toISOString(),
     };

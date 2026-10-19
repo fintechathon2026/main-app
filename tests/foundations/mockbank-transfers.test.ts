@@ -94,16 +94,49 @@ describe.skipIf(!DB_ENABLED)("mock bank: internal transfers, reverse and call-lo
     expect(ev.rows[0].n).toBe(1);
   });
 
-  it("rejects amounts above the balance (422) and non-positive or non-integer amounts (400)", async () => {
+  it("rejects amounts above the balance (422) and non-positive amounts or amounts with more than two decimals (400)", async () => {
     const u = await userWithSavings();
     expect((await sweep(u.id, 100001)).json.error).toBe("insufficient_funds");
     expect((await sweep(u.id, 100001)).status).toBe(422);
-    for (const bad of [-5, 0, 12.5, "100", null]) {
+    for (const bad of [-5, 0, 12.505, "100", null]) {
       const r = await sweep(u.id, bad);
       expect(r.status).toBe(400);
       expect(r.json.error).toBe("invalid_request");
     }
     expect(await balance(u.checking)).toBe(100000);
+    expect((await admin.query("select count(*)::int as n from mockbank.transfers where customer_id = $1", [u.id])).rows[0].n).toBe(0);
+  });
+
+  it("accepts a sweep of 12.50 and books exactly 12.50 on both accounts", async () => {
+    const u = await userWithSavings();
+    const r = await sweep(u.id, 12.50);
+    expect(r.status).toBe(201);
+    expect(r.json).toMatchObject({ status: "succeeded", amount: 12.5 });
+    const tx = await admin.query(
+      "select account_id, amount::text as amount from mockbank.transactions where account_id = any($1::uuid[])",
+      [[u.checking, u.savings]],
+    );
+    const byAccount = Object.fromEntries(tx.rows.map((row) => [row.account_id, row.amount]));
+    expect(byAccount).toEqual({ [u.checking]: "-12.50", [u.savings]: "12.50" });
+    const t = await admin.query("select amount::text as amount from mockbank.transfers where id = $1", [r.json.transfer_id]);
+    expect(t.rows[0].amount).toBe("12.50");
+
+    const back = await reverse(u.id, String(r.json.transfer_id));
+    expect(back.status).toBe(200);
+    expect(back.json.amount).toBe(12.5);
+    expect(await balance(u.checking)).toBe(100000);
+    expect(await balance(u.savings)).toBe(0);
+  });
+
+  it("rejects 12.505, 0 and \"abc\" with 400 and moves nothing", async () => {
+    const u = await userWithSavings();
+    for (const bad of [12.505, 0, "abc"]) {
+      const r = await sweep(u.id, bad);
+      expect(r.status).toBe(400);
+      expect(r.json.error).toBe("invalid_request");
+    }
+    expect(await balance(u.checking)).toBe(100000);
+    expect(await balance(u.savings)).toBe(0);
     expect((await admin.query("select count(*)::int as n from mockbank.transfers where customer_id = $1", [u.id])).rows[0].n).toBe(0);
   });
 

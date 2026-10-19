@@ -47,6 +47,20 @@ describe.skipIf(!DB_ENABLED)("mock bank adapter: transferInternal", () => {
     expect(found?.reference).toBe(r1.reference);
   });
 
+  it("transferInternal sweeps a two-decimal amount", async () => {
+    const u = await createTestUser(admin, []);
+    await admin.query(
+      `insert into mockbank.accounts (customer_id, name, type, currency, balance, is_default)
+       values ($1, 'Test savings', 'savings', 'CNY', 0, false)`,
+      [u.id],
+    );
+    const r = await adapter.transferInternal({ amount: 12.5 }, { customerId: u.id, idempotencyKey: `sweep:${randomUUID()}` });
+    expect(r.status).toBe("succeeded");
+    expect((r.raw as { amount: unknown }).amount).toBe(12.5);
+    const row = await admin.query("select amount::text as amount from mockbank.transfers where id = $1", [r.reference]);
+    expect(row.rows[0].amount).toBe("12.50");
+  });
+
   it("maps bank refusals to definitive SettlementErrors", async () => {
     const u = await createTestUser(admin, []);
     const err = await adapter
