@@ -3,7 +3,8 @@
 // match. Widening changes need confirmWidening (passkey in R1). The agent has no path here (G6).
 
 import { z } from "zod";
-import { jsonError } from "@/src/server/db/read/http";
+import { fixturesEnabled, jsonError } from "@/src/server/db/read/http";
+import { FixtureActivateError, fixtureActivate } from "@/src/server/fixture-state";
 import { PolicyDraft, withDefaults } from "@/src/server/mandate/schema";
 import { MandateActivateError, activateMandate } from "@/src/server/mandate/store";
 import { baseCurrencyOf, internal, sessionOr401 } from "../_lib";
@@ -21,7 +22,8 @@ const Body = z
 const STATUS: Record<MandateActivateError["code"], number> = { invalid_policy: 422, hash_mismatch: 409, stale_base: 409, widening_not_confirmed: 428 };
 
 export async function POST(request: Request): Promise<Response> {
-  const userId = await sessionOr401(request);
+  const fixtures = fixturesEnabled();
+  const userId = fixtures ? null : await sessionOr401(request);
   if (userId instanceof Response) return userId;
   let body: z.infer<typeof Body>;
   try {
@@ -39,6 +41,15 @@ export async function POST(request: Request): Promise<Response> {
     : rest;
   const draft = PolicyDraft.safeParse(draftInput);
   if (!draft.success) return jsonError(422, "candidate does not match the mandate schema", "invalid_policy");
+  if (userId === null) {
+    try {
+      const { policy } = withDefaults(draft.data, "CNY");
+      return Response.json(fixtureActivate({ candidate: policy, policyHash: body.policyHash, baseVersion: body.baseVersion, createdVia: body.createdVia, confirmWidening: body.confirmWidening }));
+    } catch (e) {
+      if (e instanceof FixtureActivateError) return jsonError(STATUS[e.code], e.code.replaceAll("_", " "), e.code);
+      return internal("mandate activate failed", e);
+    }
+  }
   try {
     const { policy } = withDefaults(draft.data, await baseCurrencyOf(userId));
     const r = await activateMandate(userId, { candidate: policy, policyHash: body.policyHash, baseVersion: body.baseVersion, createdVia: body.createdVia, confirmWidening: body.confirmWidening });

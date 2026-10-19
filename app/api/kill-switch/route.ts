@@ -4,13 +4,14 @@ import { connection } from "next/server";
 import { z } from "zod";
 import { getSessionUserId } from "@/src/server/auth/session";
 import { fixturesEnabled, jsonError } from "@/src/server/db/read/http";
+import { fixtureKillSwitch, fixtureSetKillSwitch } from "@/src/server/fixture-state";
 import { getKillSwitch, setKillSwitch } from "@/src/server/settings/kill-switch";
 
 const Body = z.object({ enabled: z.boolean() }).strict();
 
 export async function GET(request: Request): Promise<Response> {
   await connection();
-  if (fixturesEnabled()) return Response.json({ enabled: false, changedAt: "2026-10-16T00:00:00.000Z" });
+  if (fixturesEnabled()) return Response.json(fixtureKillSwitch());
   const userId = await getSessionUserId(request);
   if (!userId) return jsonError(401, "unauthorized");
   try {
@@ -22,14 +23,16 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const userId = await getSessionUserId(request);
-  if (!userId) return jsonError(401, "unauthorized");
+  const fixtures = fixturesEnabled();
+  const userId = fixtures ? null : await getSessionUserId(request);
+  if (!fixtures && !userId) return jsonError(401, "unauthorized");
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await request.json());
   } catch {
     return jsonError(400, "invalid body", "bad_request");
   }
+  if (!userId) return Response.json(fixtureSetKillSwitch(body.enabled));
   try {
     return Response.json(await setKillSwitch(userId, body.enabled));
   } catch (e) {
