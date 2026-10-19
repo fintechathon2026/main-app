@@ -147,9 +147,10 @@ contracts/                                 Foundry project (ESLint ignores it)
 ├─ src/PrepaidEscrow.sol, src/TestCNY.sol
 ├─ test/PrepaidEscrow.t.sol                unit + fuzz
 ├─ test/Invariants.t.sol, test/handlers/EscrowHandler.sol
-├─ test/utils/Signatures.sol               EIP-712 signing helpers for tests
+├─ test/utils/EscrowTestBase.sol           fixture + EIP-712 signing helpers for tests
 ├─ script/Deploy.s.sol                     deploy, write deployments/<chainId>.json
 ├─ script/Spike.s.sol                      purchase, redeem, attested exit; prints 3 hashes
+├─ script/anvil-rehearsal.sh               deploy + spike on a local anvil
 ├─ deployments/                            addresses per chain (committed for 84532)
 └─ lib/                                    forge-std, openzeppelin-contracts (git submodules, pinned tags)
 
@@ -164,7 +165,7 @@ src/sim/merchant/                          merchant simulator: signed offers, ch
 app/api/cron/chain-sync/route.ts           indexer cron (CRON_SECRET)
 app/sim/merchant/{offers,checkin}/route.ts simulator routes (SIM_API_KEY)
 supabase/migrations/20261020000012_chain_nonces.sql
-scripts/export-contract-abi.ts, scripts/chain-demo-setup.ts
+scripts/export-contract-abi.ts, scripts/chain-demo-setup.ts (+ -main.ts)
 tests/chain/                               Vitest suites on anvil (skipped without anvil / artifacts / DB)
 ```
 
@@ -209,7 +210,7 @@ Why a new table: `chain_txs` is user-scoped under RLS, so "max stored nonce + 1"
 | `REINS_ESCROW` | `ESCROW_ADDRESS` | Adapter |
 |---|---|---|
 | `chain` | valid address | `ChainEscrowAdapter` |
-| `chain` | missing | startup error on first prepaid action (`escrow_not_configured`, definitive) |
+| `chain` | missing | the first prepaid action fails with `escrow_not_configured` (definitive); never a silent fallback to the mock, so the demo cannot claim on-chain while running on the mock |
 | `mock` or unset | any | mock escrow over `/mockbank` (architecture §24.13) |
 
 Tests inject the adapter through `ExecutorDeps.escrow` as today.
@@ -298,7 +299,7 @@ Deploy the compiled contracts on a fresh anvil, sign each typed struct with viem
 |---|---|---|
 | `tests/chain/adapter.test.ts` | anvil, DB | purchase and redeem through the relayer; reverts caught at simulation send nothing; re-running an action re-uses the stored transaction (same hash); 10 parallel sends get distinct consecutive nonces |
 | `tests/chain/exit.e2e.test.ts` | anvil, DB | chain-sync indexes a purchased plan for the user; a signed attestation + `prepaid_exit` action → executor `succeeded` with a real tx hash; consumer balance up by the unused amount; escrow balance 0; second run returns the same result and sends nothing; forged attestation → Gate denies and no transaction is sent |
-| `tests/chain/indexer.test.ts` | anvil, DB | plans, sessions and exits indexed; unknown merchant skipped; re-run is a no-op |
+| (indexer cases are in `exit.e2e.test.ts`) | anvil, DB | plans, sessions and exits indexed; unknown merchant skipped; re-run is a no-op |
 
 All chain suites skip when `anvil` is not on `PATH` or `contracts/out` is missing; DB suites skip when `DATABASE_URL` is unset (existing pattern).
 
@@ -344,3 +345,55 @@ The same steps run against a local anvil (`--rpc-url http://127.0.0.1:8545`, anv
 3. On anvil, the spike script prints three confirmed hashes, and the integration test moves Lin-like money back to the consumer through the agent with the Gate in the loop.
 4. With `REINS_ESCROW=mock`, behavior is unchanged.
 5. The Base Sepolia deployment and the three evidence hashes are recorded once funded keys are available (§9; needs the team's keys, not part of the code change).
+
+## 13. Implementation status (October 20, 2026)
+
+### 13.1 Built on `feat/r3-02-escrow-contract`
+
+| Area | Files | Verified by |
+|---|---|---|
+| Contracts | `contracts/src/PrepaidEscrow.sol`, `TestCNY.sol` | 47 unit/fuzz tests, 3 invariants (64 runs × 32 calls, 0 handler reverts) |
+| Deploy, spike, rehearsal | `contracts/script/*` | `anvil-rehearsal.sh`: purchase, redeem, attested exit all `status 1`; balances reconcile |
+| ABI, EIP-712, client | `src/server/chain/{abi,eip712,client}.ts`, `scripts/export-contract-abi.ts` | `tests/chain/abi.test.ts`, `eip712.test.ts` (digest parity for all 5 structs) |
+| Adapter + executor wiring | `src/server/adapters/settlement/chain/escrow.ts`, `src/server/executor/run.ts` | `tests/chain/adapter.test.ts` (7 cases incl. 10 parallel sends) |
+| Nonces | `supabase/migrations/20261020000012_chain_nonces.sql` | parallel-send test |
+| Indexer + cron | `src/server/chain/indexer.ts`, `app/api/cron/chain-sync/route.ts` | `tests/chain/exit.e2e.test.ts` |
+| Merchant simulator | `src/sim/merchant/*`, `app/sim/merchant/*` | `eip712.test.ts` (offer and check-in signatures recover on chain) |
+| Key-scoping lint | `eslint.config.mjs` | probe file: both `process.env.X` and `process.env["X"]` rejected |
+| Demo setup | `scripts/chain-demo-setup.ts` | run on anvil + local Supabase: Lin's plan indexed (60 units, 12 used, 12 sessions) |
+| CI | `.github/workflows/ci.yml` job `contracts` | runs `forge test` with the `ci` profile |
+
+Full suite: `pnpm lint`, `pnpm typecheck` clean; `pnpm test` 493 passed with local Supabase and anvil
+(7 consecutive full runs green); without DB and Foundry 423 passed, 70 skipped (CI shape).
+
+End-to-end check on anvil with the demo database: registry publishes a court-enforcement
+attestation → risk job verifies and stores it → `prepaid_exit` → Gate `allow`
+(`prepaid.exit_plan`, `prepaid.auto_exit_on`) → executor with `REINS_ESCROW=chain` sends
+`exitWithAttestation` from the agent key → Lin's tCNY balance 0 → 480,000 fen, escrow balance 0.
+The LLM planner was replaced by a stand-in that captures the same action (see 13.3).
+
+### 13.2 Decisions made during implementation
+
+- **Escrow merchant address follows the merchant key.** `simMerchantAddress` returns the address of
+  `MERCHANT_SIM_PRIVATE_KEY` for FitBox when the key is set, so registry attestations and on-chain
+  plans name the same merchant. Without the key, the fictional seeded address (tests unchanged).
+- **Uncached block number in the indexer.** viem caches `getBlockNumber` for one polling interval,
+  which skipped logs of a just-confirmed transaction.
+- **Chain reset detection.** A cursor past the chain head means a restarted local chain; the indexer
+  starts over from `CHAIN_START_BLOCK`. The demo setup script also clears local chain state, on chain
+  31337 only.
+- **`.env.example` default is now `REINS_ESCROW=mock`.** Existing `.env.local` files copied from the
+  old template still say `chain`; with no `ESCROW_ADDRESS` their prepaid actions now fail on purpose.
+- **Polling interval 1 s** for the server's public client (Base Sepolia blocks are about 2 s).
+
+### 13.3 Not done here (owners in `roles.md`)
+
+| Item | Why it matters | Owner |
+|---|---|---|
+| Base Sepolia deployment and the three evidence hashes | Needs the team's funded keys (§9) | R3 |
+| User-signed `/api/prepaid/{wallet,purchase,plans/:id/checkin}` routes and consumer-signature recovery in phase A | Without them, purchase and check-in in the app UI are not possible; the adapter methods exist | R2-07, R1 |
+| Browser key, buy sheet, check-in signing, explorer links | UI side of the same flow | R4 |
+| Re-recording `evals/recordings/demo_lin` for the chain-mode demo | Recorded planner calls are keyed by the exact request; Lin's on-chain plan has new ids, so `REINS_MODELS=recorded` misses. Re-record with `scripts/record-demo.ts` after `chain-demo-setup`, or run live models | R1 |
+| `reconcile` cron (re-broadcast `pending`, settle `unknown`), replace-by-fee | `pending` currently stays `unknown` until someone looks | R3 |
+| `(escrow address, chain_plan_id)` uniqueness | `chain_plan_id` is globally unique, which only holds with one deployment per database | R3 |
+| Security-definer user lookup for cron jobs | `REINS_CRON_USER_IDS` stop-gap, shared with `cron/detect` | R3 |
