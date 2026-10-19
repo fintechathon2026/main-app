@@ -15,6 +15,7 @@ import type { Icon } from "@phosphor-icons/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { SignOutButton } from "../auth/sign-out";
 import { Logo } from "../components/logo";
 import { PauseProvider, PauseButton, PausedBanner } from "./pause";
 
@@ -70,7 +71,8 @@ function Sidebar({ pathname }: { pathname: string }) {
       <ul>
         <SideLink item={EVIDENCE} active={isActive(pathname, EVIDENCE.href)} />
       </ul>
-      <div className="mt-auto">
+      <div className="mt-auto space-y-1">
+        <SignOutButton full />
         <PauseButton full />
       </div>
     </nav>

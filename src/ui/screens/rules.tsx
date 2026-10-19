@@ -8,6 +8,7 @@
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import { LIN_MANDATE_V3 } from "@/src/core/mandate/examples";
+import { SignOutButton } from "../auth/sign-out";
 import { postJson, useApi } from "../data";
 import { dateTime, formatMoney } from "../format";
 import { BottomSheet } from "../components/overlay";
@@ -152,6 +153,9 @@ export function RulesScreen() {
               <h2 className="px-1 pb-2 text-[17px] font-semibold">Change history</h2>
               <div className="rounded-card border border-line bg-surface p-4">
                 <History versions={history.data} />
+              </div>
+              <div className="mt-6 flex justify-center">
+                <SignOutButton />
               </div>
             </div>
           </div>
