@@ -117,3 +117,13 @@ Read `docs/architecture.md` for detail. The shape that needs several files to se
 ## Next.js 16
 
 This Next.js version has breaking changes from older training data. Before writing Next.js code, read the relevant guide in `node_modules/next/dist/docs/` and heed deprecation notices. `cacheComponents` is on in `next.config.ts`. Route handlers run on Node by default. Do not add `export const runtime`: Cache Components does not support the runtime segment config, even `"nodejs"`. The Edge runtime is deprecated and not used.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
