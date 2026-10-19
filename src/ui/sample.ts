@@ -156,7 +156,7 @@ export const SAMPLE_FEED: FeedItem[] = [
   },
   {
     id: "f6",
-    at: "2026-10-15T11:30:00.000Z",
+    at: "2026-10-10T11:30:00.000Z",
     status: "done",
     title: "FitBox session 12 used",
     detail: "¥100 released to FitBox Futian after you and the gym both signed.",
@@ -209,7 +209,7 @@ export const SAMPLE_AUDIT: { chainOk: boolean; checkedAt: string; rows: AuditRow
     { seq: 44, at: "2026-10-16T03:00:00.000Z", event: "Reminder sent: Keep Premium trial", actor: "system", status: "done", ruleIds: ["subscriptions.auto_cancel_trials"], hash: "0xc5e1b9a3d7f20c4e8b6a1d3f5c7e9b0a2d4f6c8e0a1b3d5f7c9e1a2b4d6f8c0e" },
     {
       seq: 43,
-      at: "2026-10-15T11:30:00.000Z",
+      at: "2026-10-10T11:30:00.000Z",
       event: "FitBox session 12 released ¥100",
       actor: "user",
       status: "done",
