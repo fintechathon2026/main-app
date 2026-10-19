@@ -194,6 +194,107 @@ export function cancelSubscription(customerId: string, subscriptionId: string, i
   });
 }
 
+// ---- Internal transfers (savings sweep, FR11; 24h undo, FR11.2) -------------------------
+
+/** Lock both accounts in id order so a sweep and a reverse cannot deadlock. */
+async function lockAccounts(tx: PoolClient, ids: string[]) {
+  await tx.query("select id from mockbank.accounts where id = any($1::uuid[]) order by id for update", [ids]);
+}
+
+/**
+ * Sweep `amount` from the customer's default account to their own savings account. The
+ * destination is resolved here from the bank's own records; the caller cannot name one.
+ */
+export function transferInternal(customerId: string, req: { amount: number; idempotency_key: string }): Promise<MbResponse> {
+  return idempotent(req.idempotency_key, "transfer_internal", async (tx) => {
+    if (!Number.isInteger(req.amount) || req.amount <= 0) throw new MockbankError(400, "invalid_request");
+    const src = await tx.query("select id, name, currency from mockbank.accounts where customer_id = $1 and is_default", [customerId]);
+    if (!src.rowCount) throw new MockbankError(422, "no_default_account");
+    const from = src.rows[0];
+    const dst = await tx.query(
+      `select id, name from mockbank.accounts
+        where customer_id = $1 and type = 'savings' and currency = $2 and id <> $3
+        order by name, id limit 1`,
+      [customerId, from.currency, from.id],
+    );
+    if (!dst.rowCount) throw new MockbankError(422, "no_savings_account");
+    const to = dst.rows[0];
+    await lockAccounts(tx, [from.id, to.id]);
+    const bal = await tx.query("select balance from mockbank.accounts where id = $1", [from.id]);
+    if (Number(bal.rows[0].balance) < req.amount) throw new MockbankError(422, "insufficient_funds");
+
+    const transferId = randomUUID();
+    await tx.query("update mockbank.accounts set balance = balance - $2 where id = $1", [from.id, req.amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [to.id, req.amount]);
+    await tx.query(
+      `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
+       values ($1, now(), $3, $5, 'SWEEP TO SAVINGS'), ($2, now(), $4, $5, 'SWEEP FROM CHECKING')`,
+      [from.id, to.id, -req.amount, req.amount, from.currency],
+    );
+    const t = await tx.query(
+      `insert into mockbank.transfers (id, idempotency_key, customer_id, from_account_id, to_account_id, amount, currency,
+         status, reversible_until)
+       values ($1, $2, $3, $4, $5, $6, $7, 'succeeded', now() + interval '24 hours')
+       returning reversible_until`,
+      [transferId, req.idempotency_key, customerId, from.id, to.id, req.amount, from.currency],
+    );
+    const body = {
+      transfer_id: transferId,
+      status: "succeeded",
+      amount: req.amount,
+      currency: from.currency,
+      from_account: maskId(from.id),
+      to_account: maskId(to.id),
+      reversible_until: new Date(t.rows[0].reversible_until).toISOString(),
+    };
+    await emit(tx, customerId, "transfer.succeeded", body);
+    return { status: 201, body };
+  });
+}
+
+/** Undo a sweep within its window: money goes back to the account it came from. */
+export function reverseTransfer(customerId: string, transferId: string, idempotencyKey: string): Promise<MbResponse> {
+  return idempotent(idempotencyKey, "transfer_reverse", async (tx) => {
+    const r = await tx.query(
+      `select id, customer_id, from_account_id, to_account_id, amount, currency, status,
+              now() > reversible_until as expired
+         from mockbank.transfers where id = $1 for update`,
+      [transferId],
+    );
+    const t = r.rows[0];
+    if (!t || t.customer_id !== customerId) throw new MockbankError(404, "transfer_not_found");
+    if (t.status === "reversed") throw new MockbankError(409, "transfer_already_reversed");
+    if (t.expired) throw new MockbankError(422, "reverse_window_expired");
+    await lockAccounts(tx, [t.from_account_id, t.to_account_id]);
+    const amount = Number(t.amount);
+    const bal = await tx.query("select balance from mockbank.accounts where id = $1", [t.to_account_id]);
+    if (Number(bal.rows[0].balance) < amount) throw new MockbankError(422, "insufficient_funds");
+
+    await tx.query("update mockbank.accounts set balance = balance - $2 where id = $1", [t.to_account_id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [t.from_account_id, amount]);
+    await tx.query(
+      `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
+       values ($1, now(), $3, $5, 'SWEEP REVERSED'), ($2, now(), $4, $5, 'SWEEP REVERSED')`,
+      [t.to_account_id, t.from_account_id, -amount, amount, t.currency],
+    );
+    const u = await tx.query(
+      "update mockbank.transfers set status = 'reversed', reversed_at = now() where id = $1 returning reversed_at",
+      [t.id],
+    );
+    const body = {
+      transfer_id: t.id,
+      status: "reversed",
+      amount,
+      currency: t.currency,
+      reversed_at: new Date(u.rows[0].reversed_at).toISOString(),
+    };
+    await emit(tx, customerId, "transfer.reversed", body);
+    return { status: 200, body };
+  });
+}
+
+const maskId = (id: string) => mask(id.replace(/-/g, ""));
+
 // ---- Mock escrow (architecture §24.13) --------------------------------------------------
 
 export async function getEscrowPlan(chainPlanId: string) {
