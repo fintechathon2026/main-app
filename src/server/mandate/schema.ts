@@ -24,7 +24,7 @@ export const PolicyDraft = z
           .object({
             method: z.enum(["median_mad", "conformal"]).optional(),
             k: z.number().min(0).max(10).optional(),
-            alpha: z.number().gt(0).max(1).optional(),
+            alpha: z.number().gt(0).lt(1).optional(),
             min_history: int.max(1000).optional(),
           })
           .strict()
@@ -89,7 +89,9 @@ export type Policy = {
   payees: { allow: string[]; new_payee: "deny" | "confirm" };
   bills: {
     auto_pay_max: number;
-    anomaly: { method: "median_mad" | "conformal"; k: number; alpha: number; min_history: number };
+    // alpha is optional, as in the core schema (0 < alpha < 1). Without it the conformal check
+    // fails closed in the Gate (decide.ts), so leaving it out is the restrictive default.
+    anomaly: { method: "median_mad" | "conformal"; k: number; alpha?: number; min_history: number };
     pay_days_before_due: number;
   };
   subscriptions: {
@@ -138,7 +140,7 @@ export function withDefaults(d: PolicyDraft, baseCurrency: BaseCurrency): { poli
       anomaly: {
         method: pick("bills.anomaly.method", d.bills?.anomaly?.method, "median_mad"),
         k: pick("bills.anomaly.k", d.bills?.anomaly?.k, 0),
-        alpha: pick("bills.anomaly.alpha", d.bills?.anomaly?.alpha, 1),
+        ...(d.bills?.anomaly?.alpha !== undefined ? { alpha: d.bills.anomaly.alpha } : {}),
         min_history: pick("bills.anomaly.min_history", d.bills?.anomaly?.min_history, 1000),
       },
       pay_days_before_due: pick("bills.pay_days_before_due", d.bills?.pay_days_before_due, 0),

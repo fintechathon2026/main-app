@@ -1,8 +1,10 @@
 // Mandate diff and change class (architecture §9.2, PRD §9.4).
 
 import { describe, expect, it } from "vitest";
+import { LIN_MANDATE_V3 } from "@/src/core/mandate/examples";
+import { parsePolicy } from "@/src/core/mandate/schema";
 import { diffPolicies } from "@/src/server/mandate/diff";
-import { withDefaults, type Policy } from "@/src/server/mandate/schema";
+import { withDefaults, type Policy, type PolicyDraft } from "@/src/server/mandate/schema";
 
 const base = (): Policy =>
   withDefaults(
@@ -56,5 +58,20 @@ describe("diffPolicies", () => {
 
   it("treats a first mandate as widening", () => {
     expect(diffPolicies(null, base()).class).toBe("widening");
+  });
+});
+
+describe("withDefaults", () => {
+  it("produces a policy the core schema (and so the Gate) accepts", () => {
+    expect(parsePolicy({ ...base(), version: 1 })).toEqual({ ok: true, policy: expect.anything() });
+  });
+
+  it("round-trips the seeded mandate with no diff", () => {
+    const active = { ...LIN_MANDATE_V3 } as Record<string, unknown>;
+    delete active.version;
+    const draft = { ...active };
+    delete draft.base_currency;
+    const { policy } = withDefaults(draft as PolicyDraft, "CNY");
+    expect(diffPolicies(active as unknown as Policy, policy)).toEqual({ entries: [], class: "none" });
   });
 });
