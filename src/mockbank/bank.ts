@@ -17,7 +17,8 @@ export class MockbankError extends Error {
   }
 }
 
-export type MbResponse = { status: number; body: unknown };
+/** `raw` (exports only) is sent as-is instead of JSON; it is never stored as an operation. */
+export type MbResponse = { status: number; body: unknown; raw?: { text: string; contentType: string; filename: string } };
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
@@ -408,10 +409,11 @@ export async function logCall(entry: {
   status: number;
   response: unknown;
   latencyMs: number;
+  customerId?: string | null;
 }) {
   await getMockbankPool().query(
-    `insert into mockbank.call_log (method, path, query, request_json, status, response_json, latency_ms)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
+    `insert into mockbank.call_log (method, path, query, request_json, status, response_json, latency_ms, customer_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       entry.method,
       entry.path,
@@ -420,6 +422,32 @@ export async function logCall(entry: {
       entry.status,
       entry.response === undefined ? null : JSON.stringify(entry.response),
       Math.round(entry.latencyMs),
+      entry.customerId ?? null,
     ],
   );
+}
+
+export const CALL_LOG_COLUMNS = [
+  "id",
+  "created_at",
+  "customer_id",
+  "method",
+  "path",
+  "query",
+  "status",
+  "latency_ms",
+  "request_json",
+  "response_json",
+];
+
+/** Call-log rows ordered by id, optionally for one customer, after `since` (FR10.4 export). */
+export async function listCallLog(opts: { customerId?: string; since: number; limit: number }) {
+  const r = await getMockbankPool().query(
+    `select id::text as id, created_at, customer_id, method, path, query, status, latency_ms, request_json, response_json
+       from mockbank.call_log
+      where ($1::uuid is null or customer_id = $1) and id > $2
+      order by id limit $3`,
+    [opts.customerId ?? null, opts.since, opts.limit],
+  );
+  return r.rows as Record<string, unknown>[];
 }
