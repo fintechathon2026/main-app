@@ -94,19 +94,21 @@
 
 ## 5. R4 Frontend and UI/UX
 
-- [ ] **R4-01** App shell, auth, layout, component kit; design tokens from the canvas (lime, ink, grey, lavender; Plus Jakarta Sans, Geist Mono) (§15.1)
+- [ ] **R4-01** App shell, auth, layout, component kit; design tokens from the canvas (lime, ink, grey, lavender; Plus Jakarta Sans, Geist Mono) (§15.1) *[R4 note: Partly done on `feat/ui-screens`: app shell (sidebar on desktop, floating tab bar on phones), tokens, Plus Jakarta Sans + Geist Mono, own component kit (no shadcn), Phosphor icons. Lavender dropped (one accent: lime on ink), see `docs/ui-direction.md`. Auth/login screen not built]*
 - [ ] **R4-02** Move design data to Lin and CNY in the canvas and Figma (rupiah amounts, Indonesian billers → Shenzhen equivalents). Due Sat 12:00
-- [ ] **R4-03** Approval card and feed item rendered from structured fields only (§15.3). Due Sat
-- [ ] **R4-04** Chat with streaming; approvals inbox; mandate editor with read-back and diff, incl. prepaid rules (§15.2). Due Sat
-- [ ] **R4-05** **Prepaid screen**: plans with sessions left and balance in escrow, risk status with signal sources, "test token, no value" tag. Dep: R1-08 fixtures. Due Sat
-- [ ] **R4-06** **Advisor card** (savings, break-even, expected loss with and without escrow, risk source). Due Sat
-- [ ] **R4-07** **Buy sheet with browser signing:** generate the consumer key (viem), keep it in IndexedDB, register the address, sign permit + purchase, encrypted backup download (§15.3, §24.2). Due Sun 12:00
-- [ ] **R4-08** Subscriptions + recommendations; feed "Why?" with explorer links on prepaid items; evidence screen v1 with the hash list. Due Sun
-- [ ] **R4-09** **Check-in flow** (scan or paste the gym-tablet payload, sign, submit) and gym-tablet page styling; exit cards (attested exit result, voluntary exit with fee). Due Sun 21:00
+- [x] **R4-03** Approval card and feed item rendered from structured fields only (§15.3). Due Sat *(on `feat/ui-screens`; feed items use labelled sample data until `GET /api/feed` lands)*
+- [ ] **R4-04** Chat with streaming; approvals inbox; mandate editor with read-back and diff, incl. prepaid rules (§15.2). Due Sat *[R4 note: Partly done on `feat/ui-screens`: streaming chat, approvals in Home (bottom sheet on phones, right pane on desktop), rules screen generated from the mandate with change history, and a change sheet that calls `/api/mandates/compile`. Read-back, diff and the 10 s widening review wait for the compile route (R2-08)]*
+- [x] **R4-05** **Prepaid screen**: plans with sessions left and balance in escrow, risk status with signal sources, "test token, no value" tag. Dep: R1-08 fixtures. Due Sat *(on `feat/ui-screens`)*
+- [x] **R4-06** **Advisor card** (savings, break-even, expected loss with and without escrow, risk source). Due Sat *(on `feat/ui-screens`, numbers from `/api/prepaid/offers/:id/advice`)*
+- [ ] **R4-07** **Buy sheet with browser signing:** generate the consumer key (viem), keep it in IndexedDB, register the address, sign permit + purchase, encrypted backup download (§15.3, §24.2). Due Sun 12:00 *[R4 note: Not built. The Buy button is shown disabled with the reason. Needs a decision on `idb-keyval`]*
+- [x] **R4-08** Subscriptions + recommendations; feed "Why?" with explorer links on prepaid items; evidence screen v1 with the hash list. Due Sun *(on `feat/ui-screens`; evidence uses labelled sample data until `/api/audit/*` lands)*
+- [ ] **R4-09** **Check-in flow** (scan or paste the gym-tablet payload, sign, submit) and gym-tablet page styling; exit cards (attested exit result, voluntary exit with fee). Due Sun 21:00 *[R4 note: Partly done on `feat/ui-screens`: exit result card (amount back, reason, sessions used). Check-in and voluntary exit buttons shown disabled; gym-tablet page not built (needs R3-10 check-in signing and a QR package, `qrcode.react` not added yet)]*
 - [ ] **R4-10** Playwright E2E for 5 flows: bill with approval, attack PDF blocked, cancel, mandate edit, prepaid buy → check-in → exit. Due Mon
-- [ ] **R4-11** Mobile polish; PWA manifest and icons. Due Mon
+- [ ] **R4-11** Mobile polish; PWA manifest and icons. Due Mon *[R4 note: Partly done: every screen has a phone layout on `feat/ui-screens`; PWA manifest, favicon and app icons on `feat/brand-logo`. Phone polish pass still to do after the demo device is chosen]*
 - [ ] **R4-12** Screenshots for deck and docs; UX section of the tech doc. Due Mon 20:00
 - [ ] **R4-13** Record the demo video with R5 (Section 9). Due Tue 15:00
+
+> **R4 status (Oct 19):** UI work is on branches, not yet on `main`. `feat/ui-screens`: all seven R0 screens (Home, Activity, Subscriptions, Prepaid, Your rules, Evidence, Chat) with phone and desktop layouts, light and dark. `feat/brand-logo`: logo kit in `docs/brand/`, favicon, app icons, `app/manifest.ts`. `docs/ui-direction`: `docs/ui-direction.md`, the look, words and layouts every screen follows. Screens read the real routes; where a route is missing or needs a session they show labelled sample data, and buttons always call the real route. Run with `REINS_FIXTURES=1 pnpm dev`.
 
 ## 6. R5 Finance and Product
 
