@@ -99,7 +99,7 @@ export function ApprovalDetail({ card, now }: { card: ApprovalCard; now: Date })
           )}
           {card.ruleIds.length > 0 && <Row label="Why we ask">{ruleText(card.ruleIds[card.ruleIds.length - 1])}</Row>}
           <Row label="Rule">
-            <span className="num text-[13px]">
+            <span className="num break-all text-[13px]">
               {card.ruleIds.map((id) => `§${id}`).join(", ")} v{card.mandateVersion}
             </span>
           </Row>
