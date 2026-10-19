@@ -29,7 +29,7 @@ import {
   transferInternal,
   type MbResponse,
 } from "./bank";
-import { scenarios } from "./scenarios";
+import { listScenarios, scenarios } from "./scenarios";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -129,6 +129,7 @@ async function route(req: Request, path: string[], body: Record<string, unknown>
   }
   if (p0 === "test") {
     if (!testRoutesEnabled()) throw new MockbankError(404, "not_found");
+    if (m === "GET" && p1 === "scenarios" && path.length === 2) return ok({ scenarios: listScenarios() });
     if (m === "POST" && p1 === "scenarios" && p2 && path.length === 3) {
       const s = scenarios[p2];
       if (!s) throw new MockbankError(404, "unknown_scenario");

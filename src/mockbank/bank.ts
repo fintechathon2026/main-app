@@ -365,10 +365,14 @@ export async function injectBill(
 export async function injectTransaction(
   customerId: string,
   t: { amount: number; descriptor: string; currency?: string; original_amount?: number; original_currency?: string },
+  opts: { applyToBalance?: boolean } = {},
 ) {
   return mbTx(async (tx) => {
     const acct = await tx.query("select id from mockbank.accounts where customer_id = $1 and is_default", [customerId]);
     if (!acct.rowCount) throw new MockbankError(422, "no_default_account");
+    if (opts.applyToBalance) {
+      await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [acct.rows[0].id, t.amount]);
+    }
     const r = await tx.query(
       `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor, original_amount, original_currency)
        values ($1, now(), $2, $3, $4, $5, $6) returning id, posted_at, amount, currency, descriptor`,

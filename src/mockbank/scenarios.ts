@@ -2,7 +2,7 @@
 // Named test scenarios for POST /mockbank/test/scenarios/:name (PRD §14.1). Each scenario
 // changes the bank's own state and emits events; the app picks them up via GET /events.
 
-import { MockbankError, injectBill, setDefaultBalance, setTrialEnd } from "./bank";
+import { MockbankError, injectBill, injectTransaction, setDefaultBalance, setTrialEnd } from "./bank";
 
 type Params = Record<string, unknown>;
 type Scenario = { description: string; run: (customerId: string, p: Params) => Promise<unknown> };
@@ -30,4 +30,19 @@ export const scenarios: Record<string, Scenario> = {
     description: "Set the default account balance: {balance} (default 50)",
     run: (c, p) => setDefaultBalance(c, typeof p.balance === "number" ? p.balance : 50),
   },
+  payday: {
+    description: "Post an income transaction that triggers payday and sweeps: {amount?} (default 15000), {descriptor?}",
+    run: (c, p) => {
+      const amount = int(p.amount, 15000);
+      if (amount <= 0) throw new MockbankError(400, "invalid_amount");
+      const descriptor = typeof p.descriptor === "string" && p.descriptor ? p.descriptor : "SALARY SHENZHEN TECH";
+      // Salary lands in the default account, so a following sweep has the money to move.
+      return injectTransaction(c, { amount, descriptor }, { applyToBalance: true });
+    },
+  },
 };
+
+/** GET /mockbank/test/scenarios */
+export function listScenarios() {
+  return Object.entries(scenarios).map(([name, s]) => ({ name, description: s.description }));
+}
