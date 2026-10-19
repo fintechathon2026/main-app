@@ -20,7 +20,7 @@ export function SourceInfo({ children, label = "Where this comes from" }: { chil
         onBlur={() => setOpen(false)}
         aria-expanded={open}
         aria-label={label}
-        className="-m-2 grid size-8 place-items-center rounded-full p-2 text-muted hover:text-ink"
+        className="-m-3 grid size-11 place-items-center rounded-full p-3 text-muted hover:text-ink"
       >
         <Info size={16} aria-hidden />
       </button>

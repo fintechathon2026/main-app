@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const isHome = pathname === "/";
   return (
     <PauseProvider>
-      <div className="mx-auto min-h-dvh max-w-[1440px] lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="min-h-dvh lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
         <Sidebar pathname={pathname} />
         <div className="min-w-0">
           {!isHome && <MobileTopBar />}
