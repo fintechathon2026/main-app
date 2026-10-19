@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/chat", label: "Chat", icon: "✦" },
   { href: "/subscriptions", label: "Subscriptions", icon: "↻" },
   { href: "/prepaid", label: "Prepaid", icon: "▣" },
+  { href: "/activity", label: "Activity", icon: "≡" },
 ] as const;
 
 function usePendingCount(): number {
