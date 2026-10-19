@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
+/* Design tokens: docs/ui-direction.md §6. Light by default, dark follows the system.
+   Never pure black or white. Lime only on ink (or as a fill under ink text). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --ink: #16161b;
+  --page: #f5f5f2;
+  --surface: #fdfdfb;
+  --sunken: #ecece8;
+  --muted: #6b6b73;
+  --line: #d1d5db;
+  --lime: #ebfe06;
+  /* The dark band (Home header, tab bar) stays dark in both modes. */
+  --band: #16161b;
+  --band-ink: #f5f5f2;
+  --band-muted: #a1a1aa;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --ok: #17703d;
+  --ok-bg: #e6f4ec;
+  --ask: #8a5a00;
+  --ask-bg: #fff1d6;
+  --hint: #2457c5;
+  --hint-bg: #e8eefb;
+  --stop: #b42318;
+  --stop-bg: #fdecea;
+
+  --shadow-sheet: 0 -8px 32px rgb(22 22 27 / 0.12);
+  --shadow-pop: 0 12px 32px rgb(22 22 27 / 0.14);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --ink: #f5f5f2;
+    --page: #16161b;
+    --surface: #1f1f25;
+    --sunken: #26262d;
+    --muted: #a1a1aa;
+    --line: #2c2c33;
+    --band: #0f0f13;
+
+    --ok: #4ade80;
+    --ok-bg: #16301f;
+    --ask: #fbbf24;
+    --ask-bg: #33280f;
+    --hint: #8ab4f8;
+    --hint-bg: #1a2640;
+    --stop: #f87171;
+    --stop-bg: #3a1c1c;
+
+    --shadow-sheet: 0 -8px 32px rgb(0 0 0 / 0.5);
+    --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.5);
   }
 }
 
+@theme inline {
+  --color-ink: var(--ink);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-lime: var(--lime);
+  --color-band: var(--band);
+  --color-band-ink: var(--band-ink);
+  --color-band-muted: var(--band-muted);
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-ask: var(--ask);
+  --color-ask-bg: var(--ask-bg);
+  --color-hint: var(--hint);
+  --color-hint-bg: var(--hint-bg);
+  --color-stop: var(--stop);
+  --color-stop-bg: var(--stop-bg);
+
+  --font-sans: var(--font-jakarta);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-card: 16px;
+  --radius-field: 12px;
+
+  --shadow-sheet: var(--shadow-sheet);
+  --shadow-pop: var(--shadow-pop);
+}
+
+html {
+  color-scheme: light dark;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Amounts, dates, rule ids and hashes line up in columns. */
+.num {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--hint);
+  outline-offset: 2px;
+}
+
+/* Motion: only movement that explains something (ui-direction §11). */
+@keyframes sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.anim-sheet { animation: sheet-in 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+.anim-fade { animation: fade-in 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+.anim-backdrop { animation: backdrop-in 200ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
 }
