@@ -103,7 +103,7 @@
 - [ ] **R4-07** **Buy sheet with browser signing:** generate the consumer key (viem), keep it in IndexedDB, register the address, sign permit + purchase, encrypted backup download (§15.3, §24.2). Due Sun 12:00
 - [x] **R4-08** Subscriptions + recommendations; feed "Why?" with explorer links on prepaid items; evidence screen v1 with the hash list. Due Sun *[Branch `feat/r4-demo-ui`: subscriptions, feed + "Why?" (`/activity`), evidence v1 (`/evidence`: audit verify, JSONL/CSV export, tx hash list, kill switch) done. Run-now buttons and eval report not built]*
 - [ ] **R4-09** **Check-in flow** (scan or paste the gym-tablet payload, sign, submit) and gym-tablet page styling; exit cards (attested exit result, voluntary exit with fee). Due Sun 21:00
-- [ ] **R4-10** Playwright E2E for 5 flows: bill with approval, attack PDF blocked, cancel, mandate edit, prepaid buy → check-in → exit. Due Mon
+- [ ] **R4-10** Playwright E2E for 5 flows: bill with approval, attack PDF blocked, cancel, mandate edit, prepaid buy → check-in → exit. Due Mon *[Branch `feat/r4-demo-ui`: `e2e/flows.spec.ts`, desktop + mobile, runs in CI (`pnpm test:e2e`). Flows 1–4, prepaid attested exit, evidence and kill switch pass; prepaid buy → check-in waits for R4-07/R4-09 (`test.fixme`)]*
 - [ ] **R4-11** Mobile polish; PWA manifest and icons. Due Mon *[Branch `feat/r4-demo-ui`: mobile-first layout, manifest and SVG icon done]*
 - [x] **R4-12** Screenshots for deck and docs; UX section of the tech doc. Due Mon 20:00 *[Branch `feat/r4-demo-ui`: screenshots in `docs/submission/screenshots/`, UX section in `docs/submission/ux.md`]*
 - [ ] **R4-13** Record the demo video with R5 (Section 9). Due Tue 15:00
