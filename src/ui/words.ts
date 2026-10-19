@@ -45,6 +45,7 @@ const RULE_TEXT: Record<string, string> = {
   "prepaid.escrow_only": "Prepaid money must be held safely until you use it",
   "prepaid.over_max_prepay": "Over your prepaid limit",
   "prepaid.agent_cannot_purchase": "Only you can buy a package",
+  "executor.consumer_signature_invalid": "Leaving this package needs your signature again",
   "global.daily_outflow_cap": "Daily spending limit",
   "global.kill_switch": "Everything is paused",
   "fx.rate_stale_or_unknown": "The exchange rate is too old",
