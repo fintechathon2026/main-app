@@ -7,8 +7,9 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { PrivateKeyAccount } from "viem/accounts";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { actionHash } from "@/src/core/mandate/canonical";
+import { verifyAuditChain } from "@/src/server/audit";
 import { getPool, setPool } from "@/src/server/db/pool";
 import { getMockbankPool, setMockbankPool } from "@/src/mockbank/db";
 import { decideApproval } from "@/src/server/approvals";
@@ -20,6 +21,24 @@ import { setTestOracle } from "./attestations";
 import { expectPlanInvariant, newAccount, nowS, signVoluntaryExit } from "./escrow";
 
 const DEFAULT_AGENT = "0xa9e7000000000000000000000000000000000a9e";
+const SIG_INVALID = "executor.consumer_signature_invalid";
+
+// Forces the phase-B re-verification to disagree with the snapshot's (otherwise both run on
+// identical inputs in one transaction). null = passthrough; n = n real calls, then null.
+const sigHook = vi.hoisted(() => ({ realCalls: null as number | null }));
+vi.mock("@/src/server/prepaid/exit-signature", async (orig) => {
+  const actual = await orig<typeof import("@/src/server/prepaid/exit-signature")>();
+  return {
+    ...actual,
+    verifiedVoluntaryExitSignature: async (...a: Parameters<typeof actual.verifiedVoluntaryExitSignature>) => {
+      if (sigHook.realCalls !== null) {
+        if (sigHook.realCalls <= 0) return null;
+        sigHook.realCalls -= 1;
+      }
+      return actual.verifiedVoluntaryExitSignature(...a);
+    },
+  };
+});
 
 describe.skipIf(!DB_ENABLED)("foundations: approved voluntary exit with the owner's signature", () => {
   let admin: Pool;
@@ -40,6 +59,10 @@ describe.skipIf(!DB_ENABLED)("foundations: approved voluntary exit with the owne
     process.env.AGENT_ADDRESS ??= DEFAULT_AGENT;
     restoreOracle = setTestOracle();
     admin = adminPool();
+  });
+
+  afterEach(() => {
+    sigHook.realCalls = null;
   });
 
   afterAll(async () => {
@@ -254,5 +277,103 @@ describe.skipIf(!DB_ENABLED)("foundations: approved voluntary exit with the owne
       expect(exitCalls(s.chainPlanId)).toHaveLength(0);
       expect(await escrowStatus(s.chainPlanId)).toBe("active");
     }
+  });
+
+  it("approved exit whose signature fails phase-B re-verification is denied with an executor deny record", async () => {
+    const s = await setup();
+    const sig = await signFor(s);
+    await recordVoluntaryExitSignature(s.u.id, s.actionId, sig);
+    expect((await executor.run(s.actionId, s.u.id)).status).toBe("awaiting_approval");
+    const [ap] = await approvalsOf(s.actionId);
+    await decideApproval(s.u.id, ap.id, "approve");
+    const usedBefore = await admin.query("select day::text as day, used::text as used from public.daily_limits where user_id = $1", [s.u.id]);
+
+    sigHook.realCalls = 1; // snapshot verifies for real, phase B sees no valid signature
+    const r = await executor.run(s.actionId, s.u.id);
+    expect(r.status).toBe("denied");
+    expect(r.error).toBe("consumer_signature_invalid");
+    expect(r.gate?.decision).toBe("deny");
+    expect(r.gate?.ruleIds).toEqual([SIG_INVALID]);
+    expect(r.gate?.reasons).toEqual([SIG_INVALID]);
+
+    const row = (
+      await admin.query("select status, decision, rule_ids, gate_json, args_hash from public.actions where id = $1", [s.actionId])
+    ).rows[0];
+    expect(row.status).toBe("denied");
+    expect(row.decision).toBe("deny");
+    expect(row.rule_ids).toEqual([SIG_INVALID]);
+    expect(row.gate_json.decision).toBe("deny");
+    expect(row.gate_json.ruleIds).toEqual([SIG_INVALID]);
+    expect(row.gate_json.trace.at(-1)).toEqual({ ruleId: SIG_INVALID, result: "deny", reason: SIG_INVALID });
+    expect(row.gate_json.trace).toContainEqual(expect.objectContaining({ ruleId: "approval.valid", result: "allow" }));
+
+    const audit = (
+      await admin.query(
+        "select actor, event_type, event_json from public.audit_log where user_id = $1 and event_json->>'actionId' = $2 order by seq",
+        [s.u.id, s.actionId],
+      )
+    ).rows as { actor: string; event_type: string; event_json: Record<string, unknown> }[];
+    // The Gate's execute-phase decision, the approval expiring, then the executor's deny.
+    expect(audit.slice(-3).map((a) => [a.actor, a.event_type])).toEqual([
+      ["gate", "decision"],
+      ["system", "approval.expired"],
+      ["system", SIG_INVALID],
+    ]);
+    const [decision, expired, deny] = audit.slice(-3);
+    expect(decision.event_json).toMatchObject({ phase: "execute", result: { decision: "allow" } });
+    expect(expired.event_json).toMatchObject({ reason: "consumer_signature_invalid" });
+    expect(deny.event_json).toMatchObject({
+      phase: "execute",
+      gateDecision: "allow",
+      argsHash: row.args_hash,
+      result: { decision: "deny", ruleIds: [SIG_INVALID] },
+    });
+    expect(audit.some((a) => a.event_type.startsWith("execution."))).toBe(false);
+    expect(JSON.stringify(audit)).not.toContain(sig.consumerSig);
+    expect((await verifyAuditChain(s.u.id)).ok).toBe(true);
+
+    expect((await approvalsOf(s.actionId)).map((a) => a.status)).toEqual(["expired"]);
+    const res = await admin.query("select count(*)::int as n from public.cap_reservations where action_id = $1", [s.actionId]);
+    expect(res.rows[0].n).toBe(0);
+    const usedAfter = await admin.query("select day::text as day, used::text as used from public.daily_limits where user_id = $1", [s.u.id]);
+    expect(usedAfter.rows).toEqual(usedBefore.rows);
+    expect(exitCalls(s.chainPlanId)).toHaveLength(0);
+    expect(await escrowStatus(s.chainPlanId)).toBe("active");
+
+    // Re-running returns the denied row without entering execution again.
+    sigHook.realCalls = null;
+    expect((await executor.run(s.actionId, s.u.id)).status).toBe("denied");
+    expect(exitCalls(s.chainPlanId)).toHaveLength(0);
+  });
+
+  it("a signature row must belong to the action's owner", async () => {
+    const s = await setup();
+    const b = await createTestUser(admin, []);
+    const sig = await signFor(s);
+    const insert = "insert into public.prepaid_exit_signatures (action_id, user_id, deadline, consumer_sig) values ($1, $2, $3, $4)";
+
+    await expect(admin.query(insert, [s.actionId, b.id, sig.deadline, sig.consumerSig])).rejects.toMatchObject({ code: "23503" });
+
+    // RLS alone allowed this before migration 016: user_id matches app.user_id.
+    const c = await getPool().connect(); // reins_server
+    try {
+      await c.query("begin");
+      await c.query("select set_config('app.user_id', $1, true)", [b.id]);
+      await expect(c.query(insert, [s.actionId, b.id, sig.deadline, sig.consumerSig])).rejects.toMatchObject({ code: "23503" });
+    } finally {
+      await c.query("rollback").catch(() => {});
+      c.release();
+    }
+
+    await recordVoluntaryExitSignature(s.u.id, s.actionId, sig);
+    await expect(
+      admin.query("update public.prepaid_exit_signatures set user_id = $2 where action_id = $1", [s.actionId, b.id]),
+    ).rejects.toMatchObject({ code: "23503" });
+    const row = await admin.query("select user_id from public.prepaid_exit_signatures where action_id = $1", [s.actionId]);
+    expect(row.rows).toEqual([{ user_id: s.u.id }]);
+
+    await admin.query("delete from public.actions where id = $1", [s.actionId]);
+    const n = await admin.query("select count(*)::int as n from public.prepaid_exit_signatures where action_id = $1", [s.actionId]);
+    expect(n.rows[0].n).toBe(0);
   });
 });
