@@ -20,7 +20,7 @@ import {
   type AttestationJson,
   type AttestationKind,
 } from "./eip712";
-import { SIM_MERCHANTS, type SimMerchant } from "./merchants";
+import { SIM_MERCHANTS, simMerchantAddress, type SimMerchant } from "./merchants";
 
 export const ATTESTATION_VARIANTS = ["valid", "forged", "stale", "other_merchant"] as const;
 export type AttestationVariant = (typeof ATTESTATION_VARIANTS)[number];
@@ -78,7 +78,7 @@ export async function publishAttestation(input: {
   // caseRef = hash of the registry record id (PRD §15.12); unique per publish.
   const caseRef = keccak256(toHex(`sim-registry:${subject.id}:${input.kind}:${crypto.randomUUID()}`));
   const fields = {
-    merchant: subject.address,
+    merchant: simMerchantAddress(subject, env),
     kind: ATTESTATION_KIND_CODE[input.kind],
     caseRef,
     issuedAt,
