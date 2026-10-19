@@ -14,6 +14,12 @@ const LINKS = [
   { href: "/activity", label: "Activity", icon: "≡" },
 ] as const;
 
+// Desktop sidebar only; on mobile these are reached from Home to keep the bottom bar to six.
+const MORE = [
+  { href: "/mandate", label: "Mandate", icon: "§" },
+  { href: "/evidence", label: "Evidence", icon: "⛓" },
+] as const;
+
 function usePendingCount(): number {
   const { data } = useApi<ApprovalsResponse>("/api/approvals?status=pending", { pollMs: 10_000 });
   return data?.items.length ?? 0;
@@ -48,6 +54,19 @@ export function Nav() {
                   {pending}
                 </span>
               ) : null}
+            </Link>
+          ))}
+          <div className="my-2 border-t border-grey-100" />
+          {MORE.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
+                active(l.href) ? "bg-ink text-white" : "text-ink-soft hover:bg-grey-100"
+              }`}
+            >
+              <span aria-hidden className="w-4 text-center">{l.icon}</span>
+              {l.label}
             </Link>
           ))}
         </nav>

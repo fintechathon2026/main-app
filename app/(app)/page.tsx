@@ -56,6 +56,18 @@ export default function HomePage() {
         )}
       </Card>
 
+      {/* Mobile entry points for screens that are not in the bottom bar. */}
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        <Link href="/mandate" className="rounded-2xl bg-surface px-4 py-3 text-sm ring-1 ring-grey-100">
+          <span className="block font-semibold">Your rules</span>
+          <span className="block text-xs text-grey-500">See and edit the mandate</span>
+        </Link>
+        <Link href="/evidence" className="rounded-2xl bg-surface px-4 py-3 text-sm ring-1 ring-grey-100">
+          <span className="block font-semibold">Evidence</span>
+          <span className="block text-xs text-grey-500">Audit log, tx hashes, kill switch</span>
+        </Link>
+      </div>
+
       <div className="grid gap-5 md:grid-cols-2">
         <Card>
           <SectionTitle>Next 14 days</SectionTitle>
