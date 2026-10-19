@@ -89,6 +89,13 @@ export function HomeScreen() {
           onClose={() => setSelected(null)}
           list={
             <div>
+              <Link
+                href="/chat"
+                className="mb-6 flex min-h-12 items-center gap-3 rounded-full border border-line bg-surface px-5 text-[15px] text-muted hover:text-ink"
+              >
+                <ChatCircle size={20} aria-hidden />
+                Ask about your money
+              </Link>
               {cards.length > 0 && (
                 <section aria-labelledby="h-ask">
                   <h2 id="h-ask" className="px-1 pb-2 text-[17px] font-semibold">
@@ -143,14 +150,6 @@ export function HomeScreen() {
               </section>
 
               <ThisMonth s={s} />
-
-              <Link
-                href="/chat"
-                className="mt-8 flex min-h-12 items-center gap-3 rounded-full border border-line bg-surface px-5 text-[15px] text-muted hover:text-ink"
-              >
-                <ChatCircle size={20} aria-hidden />
-                Ask about your money
-              </Link>
             </div>
           }
         />
