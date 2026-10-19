@@ -1,26 +1,54 @@
 @import "tailwindcss";
 
+/* Reins design tokens (architecture §15.1): lime, ink, grey, lavender. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #12130f;
+  --ink-soft: #3b3d36;
+  --grey-50: #f6f6f3;
+  --grey-100: #ececE6;
+  --grey-300: #c9cac1;
+  --grey-500: #7d7f75;
+  --lime: #d4f25c;
+  --lime-strong: #a8cc1f;
+  --lavender: #d9d2ff;
+  --lavender-strong: #6b5ce7;
+  --danger: #c2362b;
+  --danger-soft: #fde4e1;
+  --warn: #b7791f;
+  --warn-soft: #fdf1d8;
+  --ok: #2f7d32;
+  --ok-soft: #e3f4dc;
+  --surface: #ffffff;
+  --background: var(--grey-50);
+  --foreground: var(--ink);
 }
 
 @theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-grey-50: var(--grey-50);
+  --color-grey-100: var(--grey-100);
+  --color-grey-300: var(--grey-300);
+  --color-grey-500: var(--grey-500);
+  --color-lime: var(--lime);
+  --color-lime-strong: var(--lime-strong);
+  --color-lavender: var(--lavender);
+  --color-lavender-strong: var(--lavender-strong);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-surface: var(--surface);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-jakarta);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-jakarta), system-ui, sans-serif;
 }
