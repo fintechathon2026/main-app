@@ -1,16 +1,16 @@
-# Graph Report - reins  (2026-10-17)
+# Graph Report - reins  (2026-10-19)
 
 ## Corpus Check
-- 250 files · ~233,417 words
+- 281 files · ~248,184 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1827 nodes · 4430 edges · 129 communities (111 shown, 18 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 93 edges (avg confidence: 0.68)
+- 2009 nodes · 4900 edges · 146 communities (127 shown, 19 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 97 edges (avg confidence: 0.67)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `be364fba`
+- Built from commit: `b5eb136f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -121,6 +121,7 @@
 - 9. Mandate Service
 - 20261017000007_eval.sql
 - cron-route.test.ts
+- page.tsx
 - CLAUDE.md
 - fast-check
 - @langchain/langgraph
@@ -137,6 +138,22 @@
 - GET
 - POST
 - isoTimestamp
+- deps.ts
+- getSessionUserId
+- Contributing to Reins
+- DocumentRepo
+- signals.ts
+- rules.tsx
+- index.ts
+- format.ts
+- anomaly.ts
+- route.ts
+- route.ts
+- chat.tsx
+- @langchain/core
+- pg
+- zod
+- tailwindcss
 
 ## God Nodes (most connected - your core abstractions)
 1. `ModelClient` - 37 edges
@@ -151,73 +168,73 @@
 10. `getMockbankPool()` - 22 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `visibleBill()` --indirect_call--> `text()`  [INFERRED]
+  scripts/gen-fixture-pdfs.ts → tests/e2e/demo-script.ts
 - `listPendingCards()` --indirect_call--> `tx()`  [INFERRED]
   app/api/approvals/_lib/cards.ts → tests/read/lin-seed.ts
 - `run()` --indirect_call--> `isUuid()`  [INFERRED]
   app/api/cron/cleanup/route.ts → src/server/auth/session.ts
 - `run()` --indirect_call--> `isUuid()`  [INFERRED]
   app/api/cron/detect/route.ts → src/server/auth/session.ts
-- `visibleBill()` --indirect_call--> `text()`  [INFERRED]
-  scripts/gen-fixture-pdfs.ts → tests/e2e/demo-script.ts
-- `streamRun()` --indirect_call--> `text()`  [INFERRED]
-  src/agent/run.ts → tests/e2e/demo-script.ts
+- `toLabeled()` --indirect_call--> `field()`  [INFERRED]
+  src/agent/nodes/reader/graph.ts → tests/e2e/demo-script.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (129 total, 18 thin omitted)
+## Communities (146 total, 19 thin omitted)
 
 ### Community 0 - "lin-seed.ts"
-Cohesion: 0.06
-Nodes (65): AccountRow, getAccounts(), billOrigin(), BillRow, listBills(), parseRows(), Queryable, zDay (+57 more)
+Cohesion: 0.05
+Nodes (32): AccountRow, BillRow, FxRateRow, PrepaidOfferRow, PrepaidPlanRow, PrepaidSessionRow, RecommendationRow, ReadRepos (+24 more)
 
 ### Community 1 - "recurring.ts"
-Cohesion: 0.06
-Nodes (66): run(), run(), run(), GET(), handle(), POST(), AnomalyResult, conformalAnomaly() (+58 more)
+Cohesion: 0.11
+Nodes (40): AnomalyResult, conformalAnomaly(), conformalMinHistory(), ConformalResult, fxNormalizedAnomaly(), madAnomaly(), MadOptions, cadence() (+32 more)
 
 ### Community 2 - "lin.ts"
 Cohesion: 0.11
-Nodes (44): RFC-4122, GraphStateT, startPlan(), setMockbankPool(), decideApproval(), verifyAuditChain(), AttackIndex, AttackIndex (+36 more)
+Nodes (29): RFC-4122, arg(), isReplayable(), main(), printFlow(), createPgDocumentRepo(), IngestResult, AttackIndex (+21 more)
 
 ### Community 3 - "ModelClient"
-Cohesion: 0.08
-Nodes (20): RecordingModelClient, ChatRequest, ChatResponse, ModelClient, StructuredRequest, ScriptedModelClient, SpyModelClient, ATTACKS (+12 more)
+Cohesion: 0.11
+Nodes (12): RecordingModelClient, ChatRequest, ChatResponse, ModelClient, StructuredRequest, ScriptedModelClient, SpyModelClient, CapturedStructured (+4 more)
 
 ### Community 4 - "bank.ts"
 Cohesion: 0.12
 Nodes (38): Ctx, GET(), POST(), cancelSubscription(), createPayment(), emit(), escrowExit(), getEscrowPlan() (+30 more)
 
 ### Community 5 - "decide.ts"
-Cohesion: 0.10
-Nodes (37): AnomalyVerdict, conformalCheck(), mad(), median(), medianMadCheck(), actionArgSchemas, ageDays(), anomalyVerdict() (+29 more)
+Cohesion: 0.20
+Nodes (21): ageDays(), cancelSubscription(), caps(), checkMandate(), CONDITIONAL_AMOUNT_ORIGINS, decide(), ownedActivePlan(), payBill() (+13 more)
 
 ### Community 6 - "fakes.ts"
-Cohesion: 0.08
-Nodes (21): AgentDeps, DocumentReaderPort, DocumentStatus, PlanStore, SignalReaderPort, AgentGraph, SignalWarning, ToolContext (+13 more)
+Cohesion: 0.12
+Nodes (6): PlanStore, ToolContext, ActionExecutorPort, GateResult, FakeWorld, ruleFor()
 
 ### Community 7 - "api-types.ts"
-Cohesion: 0.12
-Nodes (29): GET(), GET(), GET(), GET(), POST(), GET(), GET(), ApiError (+21 more)
+Cohesion: 0.13
+Nodes (26): GET(), GET(), GET(), GET(), POST(), GET(), GET(), ApiError (+18 more)
 
 ### Community 8 - "models.test.ts"
-Cohesion: 0.12
-Nodes (25): ModelClients, modelIdsFromEnv(), createModelClients(), parseMode(), ROLES, loadRecordings(), RecordedModelClient, RecordedModelClientOptions (+17 more)
+Cohesion: 0.14
+Nodes (24): modelIdsFromEnv(), createModelClients(), parseMode(), ROLES, loadRecordings(), RecordedModelClient, RecordedModelClientOptions, RecordingMissError (+16 more)
 
 ### Community 9 - "graph.ts"
-Cohesion: 0.15
-Nodes (28): afterExecute(), afterLoadContext(), afterPersist(), afterPlanner(), afterPreview(), afterReader(), buildGraph(), needsSignals() (+20 more)
+Cohesion: 0.16
+Nodes (26): afterExecute(), afterLoadContext(), afterPersist(), afterPlanner(), afterPreview(), afterReader(), buildGraph(), needsSignals() (+18 more)
 
 ### Community 10 - "index.ts"
-Cohesion: 0.12
-Nodes (28): ToolSpec, getBalance, listBills, listTransactions, defineReadTool(), ToolDeps, zCurrency, zDate (+20 more)
+Cohesion: 0.14
+Nodes (23): ToolSpec, getBalance, listBills, listTransactions, defineReadTool(), ToolDeps, zCurrency, zDate (+15 more)
 
 ### Community 11 - "upload.test.ts"
-Cohesion: 0.11
-Nodes (23): ErrorResponse, json(), POST(), UploadResponse, onDocumentUploaded(), DocumentRepo, DocumentRow, DocumentType (+15 more)
+Cohesion: 0.17
+Nodes (12): DocumentRepo, DocumentRow, DocumentType, documentKey(), IngestDeps, ingestUpload(), sha256Hex(), sniffPdf() (+4 more)
 
 ### Community 12 - "attestations.ts"
-Cohesion: 0.12
-Nodes (26): attestationVerifies(), AttestationWire, FreshnessReason, recoverAttestationSigner(), VerifiedAttestation, verifyAttestation(), ATTESTATION_VARIANTS, AttestationVariant (+18 more)
+Cohesion: 0.15
+Nodes (17): ATTESTATION_VARIANTS, AttestationVariant, Store, STORE_KEY, ATTESTATION_KIND_CODE, ATTESTATION_PRIMARY_TYPE, ATTESTATION_TYPES, AttestationJson (+9 more)
 
 ### Community 13 - "recommendation.ts"
 Cohesion: 0.11
@@ -228,128 +245,128 @@ Cohesion: 0.07
 Nodes (28): dom, dom.iterable, esnext, **/*.mts, .next/dev/types/**/*.ts, next-env.d.ts, .next/types/**/*.ts, node_modules (+20 more)
 
 ### Community 15 - "withUserTx"
-Cohesion: 0.14
-Nodes (16): Trigger, createApproval(), createApprovalTx(), expireApprovals(), expireOpenApprovalsFor(), appendAudit(), withUserTx(), ActionExecutor (+8 more)
+Cohesion: 0.10
+Nodes (28): RFC-8785, actionHash(), canonical(), hashPolicy(), sha256Hex(), Trigger, consumeApproval(), createApproval() (+20 more)
 
 ### Community 16 - "summary.ts"
 Cohesion: 0.13
-Nodes (25): baseAmountOf(), fxMoney, capitalize(), computeSummary(), Insight, KIND_ORDER, SETTLED_BILL_STATUSES, SummaryBill (+17 more)
+Nodes (19): baseAmountOf(), capitalize(), computeSummary(), Insight, KIND_ORDER, SETTLED_BILL_STATUSES, SummaryBill, SummaryInput (+11 more)
 
 ### Community 17 - "run.ts"
-Cohesion: 0.13
-Nodes (22): client(), createMockbankSettlement(), createMockEscrow(), MockbankTransport, approvalState(), consumeApproval(), createExecutor(), ENTRY_STATUSES (+14 more)
+Cohesion: 0.10
+Nodes (20): Cfg, client(), createMockbankSettlement(), createMockEscrow(), MockbankTransport, ChainResult, EscrowAdapter, EscrowPlanState (+12 more)
 
 ### Community 18 - "job.ts"
-Cohesion: 0.15
-Nodes (15): freshness(), defaultRiskJobDeps(), runRiskJobRecorded(), drainPlan(), errMsg(), RegistryClient, RejectReason, RiskJobStats (+7 more)
+Cohesion: 0.13
+Nodes (18): attestationVerifies(), prepaidFacts(), AttestationWire, freshness(), FreshnessReason, recoverAttestationSigner(), VerifiedAttestation, verifyAttestation() (+10 more)
 
 ### Community 19 - "api-schemas.ts"
 Cohesion: 0.08
 Nodes (24): Assert, ChainTxRef, Checks, date, Equal, FxMoney, iso, KeepTrialResponse (+16 more)
 
 ### Community 20 - "graph.ts"
-Cohesion: 0.17
-Nodes (15): structuredOnly(), buildSignalReaderGraph(), SignalReaderDeps, SignalReaderInvalidOutput, createSignalReader(), signalReaderInput(), SignalBundle, SignalFetcher (+7 more)
+Cohesion: 0.16
+Nodes (15): buildSignalReaderGraph(), SignalReaderDeps, SignalReaderInvalidOutput, createSignalReader(), signalReaderInput(), SignalBundle, SignalFetcher, SignalWarningOutput (+7 more)
 
 ### Community 21 - "route.ts"
-Cohesion: 0.16
-Nodes (19): DecisionBody, ERROR_STATUS, ErrorBody, json(), POST(), DecisionResponse, planIdForAction(), ChatBody (+11 more)
+Cohesion: 0.46
+Nodes (7): accessTokenFromCookies(), getSession(), isUuid(), parseCookies(), Session, supabaseConfig(), verifySupabaseToken()
 
 ### Community 22 - "devDependencies"
 Cohesion: 0.09
-Nodes (23): eslint, eslint-config-next, devDependencies, eslint, eslint-config-next, supabase, tailwindcss, @tailwindcss/turbopack (+15 more)
+Nodes (23): eslint, eslint-config-next, fast-check, devDependencies, eslint, eslint-config-next, fast-check, supabase (+15 more)
 
 ### Community 23 - "run.ts"
-Cohesion: 0.17
-Nodes (13): json(), POST(), ResumeBody, pgPlanRegistry, PlanNotFoundError, PlanRegistry, resumePlan(), runConfig() (+5 more)
+Cohesion: 0.10
+Nodes (15): json(), POST(), ResumeBody, PlanNotFoundError, PlanRegistry, PlanStatus, resumePlan(), runConfig() (+7 more)
 
 ### Community 24 - "http.ts"
 Cohesion: 0.19
 Nodes (16): GET(), POST(), GET(), bearer(), safeEqual(), simAdminOk(), simReadOk(), listAttestations() (+8 more)
 
 ### Community 25 - "types.ts"
-Cohesion: 0.15
+Cohesion: 0.16
 Nodes (12): AnthropicModelClient, fingerprint(), isRecord(), mapStopReason(), ModelIds, ModelRefusalError, StructuredOutputError, toInputSchema() (+4 more)
 
 ### Community 26 - "compile.ts"
-Cohesion: 0.17
-Nodes (16): compile(), CompileResult, MandateCompileError, act(), amount(), readback(), Act, AttestationKind (+8 more)
+Cohesion: 0.18
+Nodes (15): ModelClients, compile(), CompileResult, MandateCompileError, act(), readback(), Act, AttestationKind (+7 more)
 
 ### Community 27 - "views.ts"
-Cohesion: 0.16
-Nodes (21): chainTxRef(), RiskLevel, AdviceOptions, buildPrepaidPlans(), buildRiskSignals(), CLOSURE_RATE_NOTES, EnrichedSubscription, fenToYuan() (+13 more)
+Cohesion: 0.10
+Nodes (37): RiskLevel, AdviceOptions, buildAdvice(), buildPrepaidOffers(), buildPrepaidPlans(), buildRiskSignals(), buildSavings(), chargesByMerchant() (+29 more)
 
 ### Community 28 - "dependencies"
 Cohesion: 0.10
-Nodes (21): @anthropic-ai/sdk, canonicalize, @langchain/anthropic, @langchain/core, next, dependencies, @anthropic-ai/sdk, canonicalize (+13 more)
+Nodes (21): @anthropic-ai/sdk, canonicalize, @langchain/anthropic, @langchain/langgraph-checkpoint-postgres, next, dependencies, @anthropic-ai/sdk, canonicalize (+13 more)
 
 ### Community 29 - "8. Functional Requirements"
 Cohesion: 0.10
 Nodes (21): 8. Functional Requirements, F10. Activity Feed, Explanations, Evidence (P0), F11. Savings Sweep (P1), F12a. Financial Summary and Spending Insights (P0), F12b. Budgets (P1), F13. Settlement Adapters, F14. Platforms, F15. Evaluation and Red-Team Harness (P0) (+13 more)
 
 ### Community 30 - "record-demo-main.ts"
-Cohesion: 0.26
-Nodes (13): arg(), isReplayable(), main(), printFlow(), getPool(), setPool(), prepaidUser(), trialUser() (+5 more)
+Cohesion: 0.29
+Nodes (10): setMockbankPool(), decideApproval(), setPool(), prepaidUser(), trialUser(), adminPool(), createTestUser(), inProcessTransport() (+2 more)
 
 ### Community 31 - "mockbank.ts"
-Cohesion: 0.13
-Nodes (9): Cfg, ChainResult, EscrowAdapter, EscrowPlanState, EscrowSendOpts, SettlementAdapter, SettlementError, SettlementOpts (+1 more)
+Cohesion: 0.14
+Nodes (26): run(), run(), run(), RecScore, DetectPlan, verifyCronAuth(), getPool(), DetectDeps (+18 more)
 
 ### Community 32 - "actionHash"
-Cohesion: 0.23
-Nodes (14): RFC-8785, actionHash(), canonical(), hashPolicy(), sha256Hex(), attestationKind, confirmOrDeny, nonNegInt (+6 more)
+Cohesion: 0.12
+Nodes (18): attestationKind, confirmOrDeny, nonNegInt, parsePolicy(), ParseResult, Policy, PolicyInput, policySchema (+10 more)
 
 ### Community 33 - "helpers.ts"
-Cohesion: 0.16
-Nodes (14): StartPlanInput, RiskJobDeps, publishAttestation(), resetRegistry(), deps(), fakeStartPlan(), FITBOX, fixedWarning() (+6 more)
+Cohesion: 0.14
+Nodes (13): StartPlanInput, RiskJobDeps, RiskLevel, resetRegistry(), attestationDomain(), deps(), fakeStartPlan(), FITBOX (+5 more)
 
 ### Community 34 - "db.integration.test.ts"
-Cohesion: 0.21
-Nodes (13): buildAdvice(), buildPrepaidOffers(), buildRecommendations(), buildSubscriptions(), signalsFor(), DIR, generate(), SCHEMAS (+5 more)
+Cohesion: 0.10
+Nodes (19): Logo(), BottomSheet(), Modal(), useOverlay(), Button, postJson(), AppShell(), EVIDENCE (+11 more)
 
 ### Community 35 - "repo.ts"
-Cohesion: 0.14
-Nodes (10): ActivePlan, AttestationRow, PrepaidPolicyFacts, RiskLevel, RiskMerchant, RiskSignalRow, createPgRiskRepo(), fallbackUserIds() (+2 more)
+Cohesion: 0.16
+Nodes (9): ActivePlan, AttestationRow, PrepaidPolicyFacts, RiskMerchant, RiskSignalRow, createPgRiskRepo(), fallbackUserIds(), listActivePlans() (+1 more)
 
 ### Community 36 - "cards.ts"
-Cohesion: 0.17
-Nodes (14): ApprovalCard, ApprovalRow, ApprovalsResponse, buildCard(), CardLookups, iso(), listPendingCards(), lookups() (+6 more)
+Cohesion: 0.21
+Nodes (11): ApprovalCard, ApprovalRow, buildCard(), CardLookups, iso(), listPendingCards(), lookups(), Money (+3 more)
 
 ### Community 37 - "Reins: Team Roles and Responsibilities"
 Cohesion: 0.11
 Nodes (18): 1.1 How backend work is shared, 1.2 Who owns the prepaid module (v1.1), 1. Is the split balanced?, 2. Roles, 3. Submission Checklist Ownership, 4. Shared Interfaces (agree on Day 1), 5. Day-by-Day Plan, 6.1 Working with AI coding agents (+10 more)
 
 ### Community 38 - "storage.ts"
-Cohesion: 0.13
-Nodes (11): checkKey(), createLocalDocumentStorage(), createSupabaseDocumentStorage(), DocumentStorage, DocumentStorageUnavailable, getDocumentStorage(), ServerStorageEnv, BYTES (+3 more)
+Cohesion: 0.23
+Nodes (22): getAccounts(), listBills(), parseRows(), getFxRateRow(), listFxRates(), getPrepaidOffer(), listPrepaidOffers(), listPrepaidPlans() (+14 more)
 
 ### Community 39 - "graph.ts"
-Cohesion: 0.22
-Nodes (11): ReaderFailureReason, ReaderInvalidOutput, summarizeIssues(), FIELD_ORDER, LoadedDocument, ReaderDeps, readerInput(), BillExtraction (+3 more)
+Cohesion: 0.18
+Nodes (15): ReaderFailureReason, ReaderInvalidOutput, summarizeIssues(), buildReaderGraph(), FIELD_ORDER, LoadedDocument, ReaderDeps, toLabeled() (+7 more)
 
 ### Community 40 - "quarantine.test.ts"
-Cohesion: 0.12
-Nodes (12): PlannerStateT, ReaderState, ReaderStateT, Route, SignalReaderStateT, actionSignals, echoingSignals, INJECTED (+4 more)
+Cohesion: 0.15
+Nodes (9): SignalReaderPort, PlannerState, PlannerStateT, ProposedCall, ReaderStateT, Route, SignalReaderState, SignalReaderStateT (+1 more)
 
 ### Community 41 - "Reins: Product Requirements Document (PRD) v2"
 Cohesion: 0.12
 Nodes (16): 13. Data Model, 19. Non-Functional Requirements, 1. Summary, 22. Risks and Mitigations, 23. Dependencies and Assumptions, 24. Out of Scope for v1, 25. Open Questions, 26. Glossary (+8 more)
 
 ### Community 42 - "explain.ts"
-Cohesion: 0.23
-Nodes (12): AuditRow, ACTION_LABELS, checkedPlannerAnswer(), DECISION_LABELS, explain(), rephrase(), shortHash(), templateLine() (+4 more)
+Cohesion: 0.15
+Nodes (15): AgentDeps, AuditRow, DocumentReaderPort, DocumentStatus, ACTION_LABELS, checkedPlannerAnswer(), DECISION_LABELS, explain() (+7 more)
 
 ### Community 43 - "graph.test.ts"
-Cohesion: 0.17
-Nodes (13): argsHash(), idempotencyKey(), persistPlan(), isAgentActionTool(), Harness, harnessWith(), initialInput(), warningOf() (+5 more)
+Cohesion: 0.10
+Nodes (26): UNTRUSTED_ORIGINS, ActionRow, allRoles(), Harness, HarnessOptions, harnessWith(), initialInput(), listBillsTool() (+18 more)
 
 ### Community 44 - "demo-script.ts"
-Cohesion: 0.20
-Nodes (13): visibleBill(), toLabeled(), calls(), DemoScriptModelClient, explainer(), field(), Labeled, planner() (+5 more)
+Cohesion: 0.12
+Nodes (18): calls(), DemoScriptModelClient, explainer(), field(), Labeled, planner(), PlannerContext, reader() (+10 more)
 
 ### Community 45 - "reader.test.ts"
 Cohesion: 0.20
-Nodes (12): extractDocument(), ExtractedDocument, extractPdf(), isPdf(), METADATA_KEYS, buildReaderGraph(), createDocumentReader(), fixtureBytes() (+4 more)
+Nodes (11): extractDocument(), ExtractedDocument, extractPdf(), isPdf(), METADATA_KEYS, ReaderState, fixtureBytes(), DOCS (+3 more)
 
 ### Community 46 - "Reins: System Architecture"
 Cohesion: 0.14
@@ -360,8 +377,8 @@ Cohesion: 0.14
 Nodes (14): 24.10 Sequences, 24.11 Tests, 24.12 Deployment and the Day-1 spike, 24.13 Fallback: `MockEscrowAdapter`, 24.1 Overview, 24.2 Keys, 24.3 Contract specification: `PrepaidEscrow`, 24.4 Solidity sketch (+6 more)
 
 ### Community 48 - "gen-fixture-pdfs.ts"
-Cohesion: 0.19
-Nodes (12): ATTACK_ACCOUNTS, buildPdf(), CANARIES, esc(), main(), PDF_FIXTURES, PdfFixture, PdfSpec (+4 more)
+Cohesion: 0.17
+Nodes (13): ATTACK_ACCOUNTS, buildPdf(), CANARIES, esc(), main(), PDF_FIXTURES, PdfFixture, PdfSpec (+5 more)
 
 ### Community 49 - "15. Algorithms"
 Cohesion: 0.15
@@ -372,16 +389,16 @@ Cohesion: 0.22
 Nodes (10): redactBundle(), containsPii(), digitsOf(), normalizeKey(), PiiKind, PiiMap, redactPii(), RedactResult (+2 more)
 
 ### Community 51 - "MemoryPlans"
-Cohesion: 0.15
-Nodes (3): PlanStatus, MemoryPlans, MemoryPlans
+Cohesion: 0.12
+Nodes (18): metadata, MasterDetail(), subscribeDesktop(), useIsDesktop(), AuditRow, FeedItem, MandateVersion, SAMPLE_APPROVALS (+10 more)
 
 ### Community 52 - "index.ts"
-Cohesion: 0.17
-Nodes (11): actionToolSpecs, ActionStatus, ActionTool, Actor, AGENT_ACTION_TOOLS, AgentActionTool, CancelSubscriptionArgs, PayBillArgs (+3 more)
+Cohesion: 0.11
+Nodes (19): cancel, clonePolicy(), electricity, Patch, PolicyPatch, Row, snap(), ActionStatus (+11 more)
 
 ### Community 53 - "signals.ts"
-Cohesion: 0.26
-Nodes (10): findSimMerchant(), SIM_MERCHANTS, SimMerchant, day(), fitbox(), ironpulse(), signalBundle(), SimComplaint (+2 more)
+Cohesion: 0.21
+Nodes (11): argsHash(), idempotencyKey(), persistPlan(), actionToolSpecs, isAgentActionTool(), createReadTools(), READ_TOOL_NAMES, readTools (+3 more)
 
 ### Community 54 - "20261017000002_data_tables.sql"
 Cohesion: 0.40
@@ -392,8 +409,8 @@ Cohesion: 0.15
 Nodes (12): 0. Today: decisions and messages (Friday, October 16), 10. Claims to verify before they appear anywhere, 1. Decision gates and milestones, 2. R1 Agent and Read Side, 3. R2 Safety, Execution and Evaluation, 4. R3 Platform, Data and Chain, 5. R4 Frontend and UI/UX, 6. R5 Finance and Product (+4 more)
 
 ### Community 56 - "wiring.ts"
-Cohesion: 0.29
-Nodes (9): checkpointerConnString(), getCheckpointer(), compileGraph(), createHttpSignalFetcher(), getAgentDeps(), getRunEnv(), NotWiredError, createPgDocumentRepo() (+1 more)
+Cohesion: 0.23
+Nodes (11): checkpointerConnString(), getCheckpointer(), AgentGraph, compileGraph(), createHttpSignalFetcher(), pgPlanRegistry, getAgentDeps(), getRunEnv() (+3 more)
 
 ### Community 57 - "20261017000006_mockbank.sql"
 Cohesion: 0.26
@@ -412,8 +429,8 @@ Cohesion: 0.20
 Nodes (9): 1. Recurring-charge detection (PRD §15.1), 2. Bill anomaly detection (PRD §15.2), 3. Cancel-recommendation score (PRD §15.9), 4. FX cost estimate (PRD §15.10), 5. Financial summary (PRD FR12a.1), 6. Prepaid purchase advisor (PRD §15.11), 7. Hard and soft signals (PRD §15.12), 8. Audit hash chain (PRD §15.8) (+1 more)
 
 ### Community 61 - "planner.ts"
-Cohesion: 0.31
-Nodes (8): planner(), plannerMessages(), plannerTurns(), buildContextMessage(), PlannerContextInput, QUEUED_FOR_REVIEW, TRIGGER_TASKS, ProposedCall
+Cohesion: 0.36
+Nodes (7): planner(), plannerMessages(), plannerTurns(), buildContextMessage(), PlannerContextInput, QUEUED_FOR_REVIEW, TRIGGER_TASKS
 
 ### Community 62 - "20261017000003_execution_tables.sql"
 Cohesion: 0.27
@@ -424,8 +441,8 @@ Cohesion: 0.31
 Nodes (9): public.attestations, public.chain_cursors, public.chain_txs, public.prepaid_merchants, public.prepaid_offers, public.prepaid_plans, public.prepaid_sessions, public.risk_signals (+1 more)
 
 ### Community 64 - "Reins: Agent Instructions"
-Cohesion: 0.22
-Nodes (8): Commands, Commit convention, Guarantees (never weaken), Module rules, Never, Next.js 16, Reins: Agent Instructions, Working rules
+Cohesion: 0.20
+Nodes (9): Architecture (big picture), Commands, Commit convention, Guarantees (never weaken), Module rules, Never, Next.js 16, Reins: Agent Instructions (+1 more)
 
 ### Community 65 - "0. Tech Stack at a Glance"
 Cohesion: 0.22
@@ -476,8 +493,8 @@ Cohesion: 0.29
 Nodes (6): 1. Trust zones, 2. Layers, 3. Worked example: hidden text in a bill PDF, 4. Tests that keep it true, 5. Known limits, Prompt-Injection Defenses
 
 ### Community 77 - "index.ts"
-Cohesion: 0.33
-Nodes (6): AuditActor, AuditEvent, auditHash(), AuditVerifyResult, GENESIS_HASH, normalize()
+Cohesion: 0.12
+Nodes (14): checkKey(), createLocalDocumentStorage(), createSupabaseDocumentStorage(), DocumentStorage, DocumentStorageUnavailable, getDocumentStorage(), ServerStorageEnv, BYTES (+6 more)
 
 ### Community 78 - "18. UX Requirements"
 Cohesion: 0.33
@@ -488,8 +505,8 @@ Cohesion: 0.33
 Nodes (4): cards, db, run, session
 
 ### Community 80 - "layout.tsx"
-Cohesion: 0.40
-Nodes (3): geistMono, geistSans, metadata
+Cohesion: 0.33
+Nodes (4): geistMono, jakarta, metadata, viewport
 
 ### Community 81 - "19. Environments, Configuration, and Deployment"
 Cohesion: 0.40
@@ -583,25 +600,89 @@ Nodes (3): 11.1 Cron jobs (Vercel Cron → route handlers), 11.2 Trigger to run,
 Cohesion: 0.67
 Nodes (3): 9.1 Pipeline, 9.2 Modules, 9. Mandate Service
 
+### Community 107 - "page.tsx"
+Cohesion: 0.13
+Nodes (17): metadata, RecommendationItem, SubscriptionItem, Tag(), EmptyState(), ErrorState(), SkeletonList(), dayMonth() (+9 more)
+
+### Community 109 - "fast-check"
+Cohesion: 0.15
+Nodes (15): Row(), Rows(), SourceInfo(), expiresIn(), ApprovalDetail(), approvalHeadline(), approvalSubtitle(), ERRORS (+7 more)
+
+### Community 111 - "@langchain/langgraph-checkpoint-postgres"
+Cohesion: 0.26
+Nodes (12): billOrigin(), chainTxRef(), Queryable, zDay, zNum, zNumOrNull, zOrigin, zTs (+4 more)
+
+### Community 113 - "unpdf"
+Cohesion: 0.13
+Nodes (16): metadata, PrepaidOfferItem, PrepaidPlanItem, PrepaidSignal, getNow(), getServerNow(), Loaded, PostResult (+8 more)
+
+### Community 129 - "deps.ts"
+Cohesion: 0.14
+Nodes (15): metadata, PageHeader(), AgentNote(), ButtonProps, ChainLink(), MONEY_SIZE, SampleTag(), SimulatedTag() (+7 more)
+
+### Community 130 - "getSessionUserId"
+Cohesion: 0.31
+Nodes (8): ApprovalsResponse, ErrorBody, GET(), json(), ChatBody, error(), POST(), getSessionUserId()
+
+### Community 131 - "Contributing to Reins"
+Cohesion: 0.33
+Nodes (5): 1. Branch first, for every task, 2. Branch names, 3. Pull requests, 4. Commits, Contributing to Reins
+
+### Community 132 - "DocumentRepo"
+Cohesion: 0.23
+Nodes (16): startPlan(), attestedExitFlow(), billDueFlow(), drain(), runDemoPath(), softSignalFlow(), summarize(), trialFlow() (+8 more)
+
+### Community 133 - "signals.ts"
+Cohesion: 0.20
+Nodes (13): oracleKey(), publishAttestation(), findSimMerchant(), SIM_MERCHANTS, SimMerchant, day(), fitbox(), ironpulse() (+5 more)
+
+### Community 134 - "rules.tsx"
+Cohesion: 0.19
+Nodes (11): metadata, dateTime(), formatMoney(), WhyDetail(), PlanDetail(), History(), Mandate, PAYEE_NAMES (+3 more)
+
+### Community 135 - "index.ts"
+Cohesion: 0.29
+Nodes (10): GET(), handle(), POST(), defaultRiskJobDeps(), runRiskJobRecorded(), RegistryClient, createHttpRegistryClient(), finishJobRun() (+2 more)
+
+### Community 136 - "format.ts"
+Cohesion: 0.23
+Nodes (10): Money(), currencySymbol(), dayLabel(), daysFrom(), dayStart(), MoneyLike, moneyParts(), shortDate() (+2 more)
+
+### Community 137 - "anomaly.ts"
+Cohesion: 0.44
+Nodes (7): AnomalyVerdict, conformalCheck(), mad(), median(), medianMadCheck(), actionArgSchemas, anomalyVerdict()
+
+### Community 138 - "route.ts"
+Cohesion: 0.28
+Nodes (7): DecisionBody, ERROR_STATUS, ErrorBody, json(), POST(), DecisionResponse, ApprovalError
+
+### Community 139 - "route.ts"
+Cohesion: 0.36
+Nodes (6): ErrorResponse, json(), POST(), UploadResponse, onDocumentUploaded(), OnDocument
+
+### Community 140 - "chat.tsx"
+Cohesion: 0.29
+Nodes (5): metadata, ChatScreen(), Msg, NODE_TEXT, STARTERS
+
 ## Knowledge Gaps
-- **597 isolated node(s):** `ErrorBody`, `ERROR_STATUS`, `Money`, `ApprovalCard`, `TITLES` (+592 more)
+- **639 isolated node(s):** `metadata`, `metadata`, `metadata`, `metadata`, `metadata` (+634 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **18 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `withUserTx()` connect `withUserTx` to `lin-seed.ts`, `recurring.ts`, `lin.ts`, `repo.ts`, `cards.ts`, `upload.test.ts`, `index.ts`, `run.ts`, `route.ts`, `run.ts`, `record-demo-main.ts`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `Origin` connect `recommendation.ts` to `lin-seed.ts`, `ModelClient`, `decide.ts`, `api-types.ts`, `graph.ts`, `run.ts`, `index.ts`, `views.ts`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
-- **Why does `ModelClient` connect `ModelClient` to `lin.ts`, `quarantine.ts`, `fakes.ts`, `graph.ts`, `models.test.ts`, `quarantine.test.ts`, `explain.ts`, `demo-script.ts`, `graph.ts`, `types.ts`, `compile.ts`, `record-demo-main.ts`?**
-  _High betweenness centrality (0.013) - this node is a cross-community bridge._
-- **What connects `ErrorBody`, `ERROR_STATUS`, `Money` to the rest of the system?**
-  _597 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `withUserTx()` connect `withUserTx` to `lin.ts`, `repo.ts`, `cards.ts`, `storage.ts`, `upload.test.ts`, `run.ts`, `run.ts`, `mockbank.ts`?**
+  _High betweenness centrality (0.024) - this node is a cross-community bridge._
+- **Why does `Origin` connect `recommendation.ts` to `actionHash`, `decide.ts`, `api-types.ts`, `graph.ts`, `graph.test.ts`, `@langchain/langgraph-checkpoint-postgres`, `MemoryPlans`, `index.ts`, `views.ts`?**
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
+- **Why does `PlanStore` connect `fakes.ts` to `explain.ts`, `graph.test.ts`, `withUserTx`?**
+  _High betweenness centrality (0.018) - this node is a cross-community bridge._
+- **What connects `metadata`, `metadata`, `metadata` to the rest of the system?**
+  _639 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `lin-seed.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.06287363430220573 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05142857142857143 - nodes in this community are weakly interconnected._
 - **Should `recurring.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.057946069994262765 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10904255319148937 - nodes in this community are weakly interconnected._
 - **Should `lin.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.10974025974025974 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.1140819964349376 - nodes in this community are weakly interconnected._

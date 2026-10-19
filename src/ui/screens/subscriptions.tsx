@@ -135,7 +135,7 @@ export function SubscriptionsScreen() {
                       setTab(t.key);
                       setPicked(undefined);
                     }}
-                    className={`min-h-10 rounded-full px-4 text-[14px] font-semibold transition ${
+                    className={`min-h-11 rounded-full px-4 text-[14px] font-semibold transition ${
                       tab === t.key ? "bg-surface text-ink shadow-sm" : "text-muted hover:text-ink"
                     }`}
                   >
