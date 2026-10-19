@@ -58,7 +58,7 @@ export function StatusBadge({ status, compact = false }: { status: Status; compa
   const { cls, icon: I } = STATUS_STYLE[status];
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold ${cls}`}
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold ${cls}`}
       aria-label={`Status: ${STATUS_LABEL[status]}`}
     >
       <I size={14} weight="bold" aria-hidden />
