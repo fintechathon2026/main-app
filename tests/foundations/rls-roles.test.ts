@@ -271,6 +271,39 @@ describe.skipIf(!DB_ENABLED)("foundations: RLS and grants per role", () => {
     });
   });
 
+  describe("catalog", () => {
+    // Tables in schema public allowed to run without RLS. Empty on purpose: reference tables
+    // (merchants, fx_rates, prepaid_merchants, prepaid_offers, attestations, risk_signals) and
+    // system tables (job_runs, chain_cursors) are under RLS by 20261017000005_rls.sql, so no
+    // exception is justified. Any future entry needs a migration reference and a reason.
+    const TABLES_WITHOUT_RLS: readonly string[] = [];
+
+    async function publicTables() {
+      const r = await admin.query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
+        `select c.relname, c.relrowsecurity, c.relforcerowsecurity
+           from pg_class c join pg_namespace n on n.oid = c.relnamespace
+          where n.nspname = 'public' and c.relkind in ('r','p')
+          order by 1`,
+      );
+      return r.rows;
+    }
+
+    it("every table in schema public has row level security enabled and forced", async () => {
+      const rows = await publicTables();
+      expect(rows.length).toBeGreaterThan(0);
+      const offenders = rows
+        .filter((r) => !TABLES_WITHOUT_RLS.includes(r.relname))
+        .filter((r) => !r.relrowsecurity || !r.relforcerowsecurity)
+        .map((r) => r.relname);
+      expect(offenders).toEqual([]);
+    });
+
+    it("the no-RLS allowlist names only existing tables", async () => {
+      const names = new Set((await publicTables()).map((r) => r.relname));
+      for (const t of TABLES_WITHOUT_RLS) expect(names.has(t), t).toBe(true);
+    });
+  });
+
   describe("reins_mockbank (MOCKBANK_DATABASE_URL)", () => {
     it("reads the mockbank schema but not public tables", async () => {
       const c = await getMockbankPool().connect();
