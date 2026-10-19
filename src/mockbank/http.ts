@@ -110,7 +110,8 @@ async function route(req: Request, path: string[], body: Record<string, unknown>
   }
   if (m === "POST" && p0 === "transfers" && p1 === "internal" && path.length === 2) {
     // Only the amount is read: the bank picks the customer's own savings account (no destination field).
-    return transferInternal(customer(req), { amount: Number(body?.amount), idempotency_key: idemKey });
+    const amount = typeof body?.amount === "number" ? body.amount : NaN;
+    return transferInternal(customer(req), { amount, idempotency_key: idemKey });
   }
   if (m === "POST" && p0 === "transfers" && p2 === "reverse" && path.length === 3) {
     if (!UUID_RE.test(p1)) throw new MockbankError(404, "transfer_not_found");
