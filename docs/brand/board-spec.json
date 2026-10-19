@@ -1,0 +1,35 @@
+{
+  "brand": "Reins",
+  "tagline": "You hold the reins. The agent does the work.",
+  "brief": "An AI finance agent that pays bills, manages subscriptions and protects prepaid packages, acting only inside rules the user signs. It should feel in control, calm and precise, the opposite of flashy crypto and generic AI branding.",
+  "adjectives": ["in control", "calm", "precise", "trustworthy"],
+  "criteria": "Success: avoids fintech cliches (shields, locks, arrows, blue), reads at 16 px, works in one colour, owns the lime and ink palette.",
+  "industry": "finance",
+  "nav": ["How it works", "Mandate", "Security"],
+  "brand_color": "#16161B",
+  "tile_color": "#16161B",
+  "greyscale": false,
+  "designer": "Reins team",
+  "round": 2,
+  "concepts": [
+    {
+      "name": "Taut R",
+      "symbol": "reins-symbol.svg",
+      "lockup": "reins-horizontal.svg",
+      "symbol_on_tile": "reins-symbol-reversed.svg",
+      "lockup_on_dark": "reins-horizontal-reversed.svg",
+      "idea": "The R's leg is pulled taut into a rein: you hold the line.",
+      "rationale": [
+        "Ties straight to the product promise: the user holds the reins",
+        "One stroke weight, one radius, exact 60 degree leg",
+        "Lime on ink app icon stands out from blue fintech icons"
+      ]
+    }
+  ],
+  "recommendation": "Taut R in lime on ink for app and dark surfaces, ink on light everywhere else. Lime is never used on white.",
+  "next_steps": [
+    "Trademark search on name and mark",
+    "Wire favicon and PWA icons into the Next.js app",
+    "Swap the placeholder logo in the canvas and Figma mockups"
+  ]
+}
