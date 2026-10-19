@@ -9,6 +9,16 @@ const settlementAdapters = {
 };
 const ioModules = ["pg", "@supabase/*", "@langchain/*", "@anthropic-ai/*", "viem", "unpdf"];
 
+// Key scoping (architecture §5.1, PRD_PrepaidEscrow_Contract §7.8): chain sender keys are read
+// only in the chain adapter, simulator keys only in src/sim. Tests and scripts set test keys.
+const SENDER_KEYS = "AGENT_PRIVATE_KEY|RELAYER_PRIVATE_KEY";
+const SIM_KEYS = "MERCHANT_SIM_PRIVATE_KEY|ORACLE_PRIVATE_KEY";
+const envKeyRead = (names, where) =>
+  ["name", "value"].map((prop) => ({
+    selector: `MemberExpression[object.object.name='process'][object.property.name='env'][property.${prop}=/^(${names})$/]`,
+    message: `Read ${names.replaceAll("|", " / ")} only in ${where}.`,
+  }));
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -59,6 +69,25 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  {
+    files: ["**/*.{ts,tsx,mjs}"],
+    ignores: ["src/server/adapters/settlement/chain/**", "src/sim/**", "tests/**", "scripts/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...envKeyRead(SENDER_KEYS, "src/server/adapters/settlement/chain/**"),
+        ...envKeyRead(SIM_KEYS, "src/sim/**"),
+      ],
+    },
+  },
+  {
+    files: ["src/sim/**/*.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRead(SENDER_KEYS, "src/server/adapters/settlement/chain/**")] },
+  },
+  {
+    files: ["src/server/adapters/settlement/chain/**/*.ts"],
+    rules: { "no-restricted-syntax": ["error", ...envKeyRead(SIM_KEYS, "src/sim/**")] },
   },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "contracts/**", ".claude/**", ".data/**", "supabase/.temp/**"]),
 ]);
