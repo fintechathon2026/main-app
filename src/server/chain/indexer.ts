@@ -75,7 +75,9 @@ export async function runChainSync(pool: Pool, cfg: ChainSyncConfig): Promise<Ch
     unknownMerchant: 0,
     errors: [],
   };
-  const latest = await cfg.client.getBlockNumber();
+  // Uncached: a block number cached for one polling interval would skip the logs of a
+  // transaction confirmed just before this run (the run "right after each confirmed transaction").
+  const latest = await cfg.client.getBlockNumber({ cacheTime: 0 });
   const to = latest - BigInt(cfg.confirmations ?? 2);
   const cursor = await readCursor(pool, cfg.escrow);
   const from = cursor === null ? cfg.startBlock : cursor + BigInt(1);

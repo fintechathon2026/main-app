@@ -44,7 +44,8 @@ export function chainFor(chainId: number, rpcUrl: string): Chain {
 
 export function publicClientFor(cfg: Pick<ChainConfig, "chainId" | "rpcUrls">): PublicClient {
   const transport = cfg.rpcUrls.length > 1 ? fallback(cfg.rpcUrls.map((u) => http(u))) : http(cfg.rpcUrls[0]);
-  return createPublicClient({ chain: chainFor(cfg.chainId, cfg.rpcUrls[0]), transport }) as PublicClient;
+  // Base Sepolia makes a block about every 2 s; viem's default 4 s poll would double receipt waits.
+  return createPublicClient({ chain: chainFor(cfg.chainId, cfg.rpcUrls[0]), transport, pollingInterval: 1_000 }) as PublicClient;
 }
 
 /** On-chain plan as the escrow stores it. Amounts in fen. */
