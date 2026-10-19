@@ -50,3 +50,8 @@ next-env.d.ts
 
 # graphify output (local)
 graphify-out/
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
