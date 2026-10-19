@@ -12,6 +12,7 @@ import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
+import { chainEscrowFromEnv } from "@/src/server/adapters/settlement/chain/escrow";
 import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
 import {
   ACTION_COLUMNS,
@@ -55,10 +56,26 @@ async function phaseA(userId: string, action: ActionRow, escrow: EscrowAdapter):
   return { escrowPlan: await escrow.readPlan(chainPlanId) };
 }
 
+/**
+ * REINS_ESCROW=chain uses PrepaidEscrow on chain; anything else the mock escrow (§24.13). The
+ * chain adapter is built on first use, so a misconfigured chain fails the prepaid action
+ * (escrow_not_configured, definitive) instead of silently using the mock.
+ */
+function defaultEscrow(transport: MockbankTransport | undefined): EscrowAdapter {
+  if (process.env.REINS_ESCROW !== "chain") return createMockEscrow({ transport });
+  let chain: EscrowAdapter | null = null;
+  const get = () => (chain ??= chainEscrowFromEnv());
+  return {
+    readPlan: (id) => get().readPlan(id),
+    exitWithAttestation: (a, o) => get().exitWithAttestation(a, o),
+    exitVoluntary: (a, o) => get().exitVoluntary(a, o),
+    lookup: (k, u) => get().lookup(k, u),
+  };
+}
+
 export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
   const settlement = deps.settlement ?? createMockbankSettlement({ transport: deps.transport });
-  // REINS_ESCROW=chain is not implemented yet (R3); the mock escrow is the R0 fallback (§24.13).
-  const escrow = deps.escrow ?? createMockEscrow({ transport: deps.transport });
+  const escrow = deps.escrow ?? defaultEscrow(deps.transport);
 
   async function run(actionId: string, userId: string): Promise<ExecResult> {
     // ---- Phase A ------------------------------------------------------------------------
@@ -197,7 +214,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         });
         if (!ids) throw new SettlementError("plan_not_found", true);
         if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
-        const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
+        const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key, userId: row.user_id };
         // Approved path: the Gate only upgrades an unattested exit to allow when the consumer's
         // voluntary-exit signature verified (consumerSigValid) and an approval is valid. MOCK
         // escrow: on chain this sends the consumer's exitVoluntaryBySig signature.

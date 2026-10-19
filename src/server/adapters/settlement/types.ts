@@ -33,7 +33,11 @@ export type ChainResult =
   | { status: "reverted"; txHash: string | null; reason: string }
   | { status: "pending"; txHash: string };
 
-export type EscrowSendOpts = { actionId: string; idempotencyKey: string };
+/**
+ * `userId` scopes the chain adapter's chain_txs writes and attestation read (RLS); the mock
+ * ignores it (PRD_PrepaidEscrow_Contract §7.3).
+ */
+export type EscrowSendOpts = { actionId: string; idempotencyKey: string; userId: string };
 
 /** Contract (or mock escrow) plan state, read at decision time. Amounts in fen. */
 export type EscrowPlanState = {
@@ -49,11 +53,13 @@ export type EscrowPlanState = {
 
 /**
  * Minimal EscrowAdapter (architecture §24.5). purchase/redeem are not implemented in the mock
- * yet (they need the EIP-712 signature checks owned by R2/R3).
+ * yet (they need the EIP-712 signature checks owned by R2/R3); the chain adapter adds them
+ * (src/server/adapters/settlement/chain/escrow.ts).
  */
 export interface EscrowAdapter {
   readPlan(chainPlanId: string): Promise<EscrowPlanState | null>;
   exitWithAttestation(a: { chainPlanId: string; attestationId: string }, o: EscrowSendOpts): Promise<ChainResult>;
   exitVoluntary(a: { chainPlanId: string }, o: EscrowSendOpts): Promise<ChainResult>;
-  lookup(idempotencyKey: string): Promise<ChainResult | null>;
+  /** `userId`: the chain adapter can only read that user's transactions (RLS); without it, null. */
+  lookup(idempotencyKey: string, userId?: string): Promise<ChainResult | null>;
 }
