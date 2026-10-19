@@ -92,6 +92,17 @@
 - [ ] **R3-15** README, deployment instructions incl. contract deploy and addresses; tech doc "System architecture" + contract spec. Due Mon 20:00
 - [ ] **R3-16** Final deploy, tag `demo-*`, smoke E2E (**M4**). Due Tue 12:00
 
+> **R3 status (backend and database, branch `feat/r3-backend-db`, not yet on `main`):** items stay unticked until merged.
+> - **R3-04:** new migrations 012–014 (security-definer `cron_user_ids()` / `risk_active_prepaid_plans()` granted only to `reins_server`; `mockbank.transfers` and `call_log.customer_id`; mock escrow plan id sequence, used-auth store and payout ledger). 001–011 unchanged.
+> - **R3-05:** mock bank internal transfer and 24h reverse (bank picks the destination), `payday` scenario and scenario listing, `transferInternal` in the adapter.
+> - **R3-06:** pooler test for RLS settings and the checkpointer (`tests/foundations/pooler.test.ts`, runs only with `DATABASE_URL_POOLER`).
+> - **R3-07:** shared cron jobs, `cron/chain-sync` (`CRON_SECRET`), admin-allowlisted `/api/admin/run-now`, `/api/kill-switch`, `/api/settings`, with API types and fixtures.
+> - **R3-10:** merchant simulator offers (FitBox with escrow, one without) and check-in signing under `src/sim/merchant`, `app/sim/merchant`.
+> - **R3-12:** mock escrow with the contract's signature checks and rules for purchase, redeem, attested and voluntary exit; payouts only to plan merchant or owner; EIP-712 types in `src/server/chain/types.ts`. `EscrowAdapter` (R2-owned) and `run.ts` changed additively; needs R2 review.
+> - **R3-14:** RLS tests per role for every user-scoped table, audit export (JSONL/CSV), mock bank call log export.
+>
+> **Remaining:** Vercel deploy on Node 22 (R3-06); real pooler check against Supabase cloud (R3-06); gym-tablet page (R3-10); all chain items R3-01/02/03/08/09/11/13; Basescan transaction hash list (R3-14, needs chain). Follow-ups from review: pass the owner's deadline and signature to `exitVoluntary` once R2 adds signature recovery; RLS test should also catch future tables; sweeps accept whole units only.
+
 ## 5. R4 Frontend and UI/UX
 
 - [x] **R4-01** App shell, auth, layout, component kit; design tokens from the canvas (lime, ink, grey, lavender; Plus Jakarta Sans, Geist Mono) (§15.1) *[R4 note: Partly done on `feat/ui-screens`: app shell (sidebar on desktop, floating tab bar on phones), tokens, Plus Jakarta Sans + Geist Mono, own component kit (no shadcn), Phosphor icons. Lavender dropped (one accent: lime on ink), see `docs/ui-direction.md`. Sign in page (email link), auth gate and sign out on `feat/ui-login`: needs NEXT_PUBLIC_SUPABASE_URL and ANON_KEY; without them the app opens as before. Not tried against a real Supabase project yet]*
