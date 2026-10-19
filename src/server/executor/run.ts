@@ -13,6 +13,7 @@ import { appendAudit } from "@/src/server/audit";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
+import type { AttestationJson } from "@/src/sim/registry/eip712";
 import {
   ACTION_COLUMNS,
   buildSnapshot,
@@ -198,12 +199,20 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         if (!ids) throw new SettlementError("plan_not_found", true);
         if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
         const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
+        // The escrow re-verifies the oracle signature, so it gets the signed record the Gate used.
+        const attestation = approved
+          ? null
+          : await withUserTx(row.user_id, async (tx) => {
+              const r = await tx.query("select raw_json from public.attestations where id = $1", [attestationId]);
+              return (r.rows[0]?.raw_json as AttestationJson | undefined) ?? null;
+            });
+        if (!approved && !attestation) throw new SettlementError("attestation_missing", true);
         // Approved path: the Gate only upgrades an unattested exit to allow when the consumer's
         // voluntary-exit signature verified (consumerSigValid) and an approval is valid. MOCK
         // escrow: on chain this sends the consumer's exitVoluntaryBySig signature.
         const res = approved
           ? await escrow.exitVoluntary({ chainPlanId: ids.chain_plan_id }, sendOpts)
-          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId! }, sendOpts);
+          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId!, attestation: attestation! }, sendOpts);
         if (res.status === "reverted") throw new SettlementError(res.reason, true, res);
         if (res.status === "pending") throw new SettlementError("pending", false, res);
         return { txHash: res.txHash, simulated: res.txHash.startsWith("mock:"), mode: approved ? "voluntary" : "attested", events: res.events };

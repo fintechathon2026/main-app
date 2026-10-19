@@ -12,8 +12,6 @@ import {
   MockbankError,
   cancelSubscription,
   createPayment,
-  escrowExit,
-  getEscrowPlan,
   injectBill,
   injectTransaction,
   listAccounts,
@@ -29,6 +27,7 @@ import {
   transferInternal,
   type MbResponse,
 } from "./bank";
+import { escrowExitAttested, escrowExitVoluntary, escrowPurchase, escrowRedeem, getEscrowPlan } from "./escrow";
 import { listScenarios, scenarios } from "./scenarios";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -122,11 +121,12 @@ async function route(req: Request, path: string[], body: Record<string, unknown>
     const since = Number(q("since") ?? 0);
     return ok({ events: await listEvents(customer(req), Number.isFinite(since) ? since : 0) });
   }
-  if (p0 === "escrow" && p1 === "plans" && /^\d+$/.test(p2 ?? "")) {
+  if (m === "POST" && p0 === "escrow" && p1 === "purchase" && path.length === 2) return escrowPurchase(body, idemKey);
+  if (p0 === "escrow" && p1 === "plans" && /^\d{1,78}$/.test(p2 ?? "")) {
     if (m === "GET" && path.length === 3) return ok({ plan: await getEscrowPlan(p2) });
-    if (m === "POST" && path.length === 4 && (p3 === "exit-attested" || p3 === "exit-voluntary")) {
-      return escrowExit(p2, p3 === "exit-attested" ? "attested" : "voluntary", String(body?.caller ?? ""), idemKey);
-    }
+    if (m === "POST" && path.length === 4 && p3 === "redeem") return escrowRedeem(p2, body, idemKey);
+    if (m === "POST" && path.length === 4 && p3 === "exit-attested") return escrowExitAttested(p2, body, idemKey);
+    if (m === "POST" && path.length === 4 && p3 === "exit-voluntary") return escrowExitVoluntary(p2, body, idemKey);
   }
   if (p0 === "test") {
     if (!testRoutesEnabled()) throw new MockbankError(404, "not_found");

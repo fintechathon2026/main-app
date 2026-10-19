@@ -27,7 +27,7 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
  * stored and replayed for every later call with the same key. An advisory lock serializes
  * concurrent calls with the same key.
  */
-async function idempotent(key: string, kind: string, fn: (tx: PoolClient) => Promise<MbResponse>): Promise<MbResponse> {
+export async function idempotent(key: string, kind: string, fn: (tx: PoolClient) => Promise<MbResponse>): Promise<MbResponse> {
   if (!key) throw new MockbankError(400, "idempotency_key_required");
   return mbTx(async (tx) => {
     await tx.query("select pg_advisory_xact_lock(hashtext('mb:idem:' || $1))", [key]);
@@ -296,51 +296,7 @@ export function reverseTransfer(customerId: string, transferId: string, idempote
 
 const maskId = (id: string) => mask(id.replace(/-/g, ""));
 
-// ---- Mock escrow (architecture §24.13) --------------------------------------------------
-
-export async function getEscrowPlan(chainPlanId: string) {
-  const r = await getMockbankPool().query(
-    `select chain_plan_id::text as chain_plan_id, owner, merchant, agent, unit_price::int as unit_price, units_total,
-            units_redeemed, cancel_fee_bps, status, balance::bigint::text as balance
-       from mockbank.escrow_plans where chain_plan_id = $1`,
-    [chainPlanId],
-  );
-  if (!r.rowCount) throw new MockbankError(404, "plan_not_found");
-  return r.rows[0];
-}
-
-/**
- * Mirrors PrepaidEscrow.exitWithAttestation / exitVoluntaryBySig: refunds go to the plan owner
- * only (there is no recipient parameter). Signature checks are NOT done here yet (owner: R3).
- */
-export function escrowExit(chainPlanId: string, mode: "attested" | "voluntary", caller: string, idempotencyKey: string): Promise<MbResponse> {
-  return idempotent(idempotencyKey, `escrow_exit_${mode}`, async (tx) => {
-    const r = await tx.query("select * from mockbank.escrow_plans where chain_plan_id = $1 for update", [chainPlanId]);
-    const p = r.rows[0];
-    if (!p) throw new MockbankError(404, "plan_not_found");
-    if (p.status !== "active") throw new MockbankError(409, "plan_not_active");
-    const callerOk = caller.toLowerCase() === String(p.owner).toLowerCase() || caller.toLowerCase() === String(p.agent ?? "").toLowerCase();
-    if (mode === "attested" && !callerOk) throw new MockbankError(403, "caller_not_owner_or_agent");
-    const balance = BigInt(p.balance);
-    const fee = mode === "voluntary" ? (balance * BigInt(p.cancel_fee_bps)) / BigInt(10000) : BigInt(0);
-    const refund = balance - fee;
-    const txId = `mock:${randomUUID()}`;
-    await tx.query("update mockbank.escrow_plans set status = $2, balance = 0 where chain_plan_id = $1", [
-      chainPlanId,
-      mode === "attested" ? "exited_attested" : "exited_voluntary",
-    ]);
-    const body = {
-      status: "confirmed",
-      txHash: txId,
-      chainPlanId,
-      event: mode === "attested" ? "ExitedAttested" : "ExitedVoluntary",
-      refundTo: p.owner,
-      refund: refund.toString(),
-      fee: fee.toString(),
-    };
-    return { status: 200, body };
-  });
-}
+// Mock escrow (architecture §24.13): see ./escrow.ts.
 
 // ---- Test hooks -------------------------------------------------------------------------
 

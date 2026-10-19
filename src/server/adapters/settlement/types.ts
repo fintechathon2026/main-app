@@ -2,6 +2,9 @@
 // Settlement and escrow adapter interfaces (architecture §8.4, §24.5). Imported ONLY by
 // src/server/executor/** (ESLint, G1). No method takes a destination or recipient.
 
+import type { OfferJson, PurchaseAuthJson } from "@/src/server/chain/types";
+import type { AttestationJson } from "@/src/sim/registry/eip712";
+
 export type SettlementOpts = {
   idempotencyKey: string;
   /** The paying customer at the bank (= app user id). The payer, never the payee. */
@@ -47,13 +50,29 @@ export type EscrowPlanState = {
   unitsRedeemed: number;
 };
 
+/** Signed EIP-712 data the escrow verifies itself (architecture §24.3). Never a recipient. */
+export type EscrowPurchaseArgs = {
+  offer: OfferJson;
+  merchantSig: string;
+  auth: PurchaseAuthJson;
+  consumerSig: string;
+  /** ERC-2612 permit for the token pull; the mock escrow has no token and ignores it. */
+  permit?: unknown;
+};
+
+export type EscrowRedeemArgs = { chainPlanId: string; sessionNo: number; deadline: number; consumerSig: string; merchantSig: string };
+
 /**
- * Minimal EscrowAdapter (architecture §24.5). purchase/redeem are not implemented in the mock
- * yet (they need the EIP-712 signature checks owned by R2/R3).
+ * EscrowAdapter (architecture §24.5). purchase and redeem are relayed for the parties that
+ * signed them; exitWithAttestation is the only call made with the agent key.
  */
 export interface EscrowAdapter {
   readPlan(chainPlanId: string): Promise<EscrowPlanState | null>;
-  exitWithAttestation(a: { chainPlanId: string; attestationId: string }, o: EscrowSendOpts): Promise<ChainResult>;
-  exitVoluntary(a: { chainPlanId: string }, o: EscrowSendOpts): Promise<ChainResult>;
+  purchase(a: EscrowPurchaseArgs, o: EscrowSendOpts): Promise<ChainResult>;
+  redeem(a: EscrowRedeemArgs, o: EscrowSendOpts): Promise<ChainResult>;
+  /** `attestation` is the oracle-signed record the decision used (`attestationId`). */
+  exitWithAttestation(a: { chainPlanId: string; attestationId: string; attestation: AttestationJson }, o: EscrowSendOpts): Promise<ChainResult>;
+  /** Without the owner's VoluntaryExit signature the escrow reverts. */
+  exitVoluntary(a: { chainPlanId: string; deadline?: number; consumerSig?: string }, o: EscrowSendOpts): Promise<ChainResult>;
   lookup(idempotencyKey: string): Promise<ChainResult | null>;
 }
