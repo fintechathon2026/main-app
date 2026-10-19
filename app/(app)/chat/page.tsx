@@ -32,7 +32,10 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), [messages]);
+  // Braces matter: an effect may return only a cleanup function, not scrollIntoView's result.
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // Prefill from ?prompt= (links from other screens). Prefill only: the user still sends it.
   useEffect(() => {
