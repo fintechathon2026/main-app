@@ -75,15 +75,22 @@ export function createMockbankSettlement(cfg: Cfg = {}): SettlementAdapter {
       });
       return settle(r, "confirmation");
     },
-    async transferInternal() {
-      throw new SettlementError("transfer_internal_not_implemented", true);
+    async transferInternal(a, o) {
+      // Amount only: the bank sweeps to the customer's own savings account.
+      const r = await call("POST", "/transfers/internal", {
+        customerId: o.customerId,
+        idempotencyKey: o.idempotencyKey,
+        body: { amount: a.amount, idempotency_key: o.idempotencyKey },
+      });
+      return settle(r, "transfer_id");
     },
     async lookup(idempotencyKey) {
       const r = await call("GET", `/operations/${encodeURIComponent(idempotencyKey)}`);
       if (r.status === 404) return null;
       const inner = r.json as { status_code?: number; response?: Record<string, unknown> } | null;
       if (!inner?.status_code || inner.status_code >= 300) return null;
-      return { status: "succeeded", reference: String(inner.response?.payment_id ?? inner.response?.confirmation ?? ""), raw: inner.response };
+      const ref = inner.response?.payment_id ?? inner.response?.confirmation ?? inner.response?.transfer_id ?? "";
+      return { status: "succeeded", reference: String(ref), raw: inner.response };
     },
   };
 }
