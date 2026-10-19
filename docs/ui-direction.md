@@ -180,7 +180,7 @@ One codebase, one set of pages. The break is at **1024 px** (Tailwind `lg:`).
 - **Middle:** the list for the current section.
 - **Right pane (~400 px):** the detail of the selected row, built like the velmo Summary panel: label and value rows, a total, one main button.
 - Approvals open in the right pane. When triggered from outside a list (for example from chat), they open as a centred modal (PRD §18.1).
-- Max width 1440 px, centred. Between 1024 and 1279 px the right pane narrows to 360 px.
+- Full width: the sidebar sits at the left edge and the content fills the rest. Between 1024 and 1279 px the right pane narrows to 360 px.
 
 ## 8. Screen by screen
 
