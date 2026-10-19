@@ -81,7 +81,7 @@ export function Modal({
   const panel = useOverlay(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 grid place-items-end p-0 sm:place-items-center sm:p-6">
+    <div className="fixed inset-0 z-50 grid place-items-end justify-items-stretch p-0 sm:place-items-center sm:p-6">
       <div className="anim-backdrop absolute inset-0 bg-[rgb(22_22_27/0.45)]" onClick={onClose} aria-hidden />
       <div
         ref={panel}
@@ -89,7 +89,7 @@ export function Modal({
         aria-modal="true"
         aria-label={label}
         tabIndex={-1}
-        className="anim-fade relative w-full max-w-md rounded-t-card bg-surface p-6 shadow-pop outline-none sm:rounded-card"
+        className="anim-fade relative w-full rounded-t-card bg-surface p-6 shadow-pop outline-none sm:max-w-md sm:rounded-card"
       >
         {children}
       </div>
