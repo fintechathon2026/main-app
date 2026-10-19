@@ -1,0 +1,55 @@
+{
+  "items": [
+    {
+      "id": "ac000000-0000-4000-8000-000000000010",
+      "planId": "91000000-0000-4000-8000-000000000010",
+      "tool": "prepaid_exit",
+      "actor": "agent",
+      "tier": "auto",
+      "status": "succeeded",
+      "title": "Exited plan with FitBox Futian, refund sent to you",
+      "subject": { "kind": "prepaid_plan", "id": "9a000000-0000-4000-8000-000000000001", "name": "FitBox Futian" },
+      "amount": null,
+      "ruleIds": ["global.kill_switch", "mandate.valid", "schema.prepaid_exit", "provenance.prepaid_plan", "prepaid.auto_exit_on"],
+      "reason": null,
+      "mandateVersion": 3,
+      "tx": { "hash": "mock:exit:9a000000-0000-4000-8000-000000000001", "explorerUrl": "", "simulated": true },
+      "createdAt": "2026-10-19T02:10:00.000Z",
+      "executedAt": "2026-10-19T02:10:03.000Z"
+    },
+    {
+      "id": "ac000000-0000-4000-8000-000000000011",
+      "planId": "91000000-0000-4000-8000-000000000011",
+      "tool": "pay_bill",
+      "actor": "agent",
+      "tier": "denied",
+      "status": "denied",
+      "title": "Blocked: pay State Grid Shenzhen",
+      "subject": { "kind": "bill", "id": "b1000000-0000-4000-8000-000000000003", "name": "State Grid Shenzhen" },
+      "amount": { "amount": 1860, "currency": "CNY" },
+      "ruleIds": ["provenance.amount"],
+      "reason": { "why": "The amount does not match the bill on record." },
+      "mandateVersion": 3,
+      "tx": null,
+      "createdAt": "2026-10-19T01:40:00.000Z",
+      "executedAt": null
+    },
+    {
+      "id": "ac000000-0000-4000-8000-000000000012",
+      "planId": "91000000-0000-4000-8000-000000000012",
+      "tool": "pay_bill",
+      "actor": "agent",
+      "tier": "auto",
+      "status": "succeeded",
+      "title": "Paid China Mobile",
+      "subject": { "kind": "bill", "id": "b1000000-0000-4000-8000-000000000002", "name": "China Mobile" },
+      "amount": { "amount": 88, "currency": "CNY" },
+      "ruleIds": ["global.kill_switch", "mandate.valid", "schema.pay_bill", "provenance.destination", "provenance.amount", "payees.allow", "bills.auto_pay_max", "global.daily_outflow_cap"],
+      "reason": null,
+      "mandateVersion": 3,
+      "tx": null,
+      "createdAt": "2026-10-18T09:00:00.000Z",
+      "executedAt": "2026-10-18T09:00:02.000Z"
+    }
+  ]
+}
