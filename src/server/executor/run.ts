@@ -30,6 +30,21 @@ import {
 const ENTRY_STATUSES = ["planned", "ready", "awaiting_approval"];
 /** Reservations not finalized within this window are released by `reconcile` (PRD §10.4). */
 const RESERVATION_TTL_SECONDS = 60;
+/** Executor fail-closed rule (not a Gate rule): an approved prepaid_exit whose stored owner
+ *  signature no longer verifies in phase B. Same name as its audit event. */
+const CONSUMER_SIG_INVALID = "executor.consumer_signature_invalid";
+
+/** The Gate's result as the deny the executor enforces, so the action row and the audit log
+ *  explain it (G7). The Gate's own trace is kept; decide() is not involved. */
+function executorDeny(gate: GateResult, ruleId: string): GateResult {
+  return {
+    ...gate,
+    decision: "deny",
+    ruleIds: [ruleId],
+    reasons: [ruleId],
+    trace: [...gate.trace, { ruleId, result: "deny", reason: ruleId }],
+  };
+}
 
 export type ExecutorDeps = {
   settlement?: SettlementAdapter;
@@ -154,14 +169,21 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
             })
           : null;
         if (!exitSig) {
+          const denied = executorDeny(gate, CONSUMER_SIG_INVALID);
           await tx.query("update public.actions set status = 'denied', decision = 'deny', rule_ids = $2, gate_json = $3 where id = $1", [
             actionId,
-            gate.ruleIds,
-            JSON.stringify(gate),
+            denied.ruleIds,
+            JSON.stringify(denied),
           ]);
           await expireOpenApprovalsFor(tx, userId, [actionId], "consumer_signature_invalid");
-          await appendAudit(tx, userId, { actor: "system", eventType: "executor.consumer_signature_invalid", data: { actionId } });
-          return { kind: "stop", res: { actionId, status: "denied", gate, error: "consumer_signature_invalid" } };
+          // The Gate's `decision` event above stays the record of decide()'s output; this event
+          // records the executor's deny. Never includes the signature itself.
+          await appendAudit(tx, userId, {
+            actor: "system",
+            eventType: CONSUMER_SIG_INVALID,
+            data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash, gateDecision: gate.decision, result: denied },
+          });
+          return { kind: "stop", res: { actionId, status: "denied", gate: denied, error: "consumer_signature_invalid" } };
         }
       }
 
