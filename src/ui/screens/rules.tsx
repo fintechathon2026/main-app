@@ -220,7 +220,7 @@ function ChangeSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
         onChange={(e) => setText(e.target.value)}
         rows={4}
         placeholder="For example: pay bills under ¥200 without asking"
-        className="mt-2 w-full rounded-field border border-line bg-page p-3 text-[15px] placeholder:text-muted focus:border-ink focus:outline-none"
+        className="mt-2 w-full rounded-field border border-line bg-page p-3 text-[16px] placeholder:text-muted focus:border-ink lg:text-[15px] focus:outline-none"
       />
       <p className="mt-2 text-[13px] text-muted">
         Giving Reins less permission applies right after you sign. Giving it more permission needs a 10 second review first.

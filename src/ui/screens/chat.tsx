@@ -171,7 +171,7 @@ export function ChatScreen() {
             }
           }}
           placeholder="Ask about your money"
-          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-[15px] placeholder:text-muted focus:outline-none"
+          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-[16px] placeholder:text-muted focus:outline-none lg:text-[15px]"
         />
         <button
           type="submit"
