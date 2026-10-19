@@ -101,7 +101,8 @@ All text and background pairs above pass WCAG AA (4.5:1 or better).
 ### Type
 
 - **Plus Jakarta Sans** for all UI text.
-- **Geist Mono** with tabular figures for every amount, date, time, rule ID and hash, so columns line up.
+- **Amounts** use Plus Jakarta Sans with tabular figures, so columns line up without looking like a terminal.
+- **Geist Mono** only for rule IDs, hashes and codes.
 - Amounts: whole part in `ink`, decimals in `muted`. Currency symbol before the number: `¥4,800.00`.
 - Sizes: page title 24/28 (mobile/desktop), key number 40/48, body 15/16, labels 13.
 - `app/layout.tsx` still loads Geist Sans from the starter. Switch it to Plus Jakarta Sans.
