@@ -1,0 +1,38 @@
+{
+  "items": [
+    {
+      "id": "a9000000-0000-4000-8000-000000000001",
+      "actionId": "ac000000-0000-4000-8000-000000000001",
+      "planId": "91000000-0000-4000-8000-000000000001",
+      "tool": "pay_bill",
+      "title": "Pay bill",
+      "payee": { "id": "SZ_POWER", "name": "State Grid Shenzhen", "source": "registry" },
+      "amount": { "amount": 486, "currency": "CNY" },
+      "subject": { "kind": "bill", "id": "b1000000-0000-4000-8000-000000000003", "dueDate": "2026-10-22", "period": "2026-09" },
+      "attestation": null,
+      "decision": "require_confirm",
+      "ruleIds": ["bills.anomaly"],
+      "mandateVersion": 3,
+      "actionHash": "0x7f3a9c21d4e8b6a05f2c1e9d8b7a6c5f4e3d2c1b0a9f8e7d6c5b4a3928170615",
+      "createdAt": "2026-10-19T01:00:00.000Z",
+      "expiresAt": "2099-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "a9000000-0000-4000-8000-000000000002",
+      "actionId": "ac000000-0000-4000-8000-000000000002",
+      "planId": "91000000-0000-4000-8000-000000000002",
+      "tool": "prepaid_exit",
+      "title": "Exit prepaid plan",
+      "payee": { "id": "FITBOX_FUTIAN", "name": "FitBox Futian", "source": "registry" },
+      "amount": null,
+      "subject": { "kind": "prepaid_plan", "id": "9a000000-0000-4000-8000-000000000001", "unitsLeft": 48, "unitsTotal": 60, "escrowBalance": { "amount": 4800, "currency": "CNY" } },
+      "attestation": { "kind": "closure_notice", "issuedAt": "2026-10-18T09:00:00.000Z", "sigValid": true, "simulated": true },
+      "decision": "require_confirm",
+      "ruleIds": ["prepaid.exit_needs_confirm"],
+      "mandateVersion": 3,
+      "actionHash": "0x1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+      "createdAt": "2026-10-19T01:05:00.000Z",
+      "expiresAt": "2099-01-01T00:00:00.000Z"
+    }
+  ]
+}
