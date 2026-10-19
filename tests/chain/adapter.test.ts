@@ -47,6 +47,7 @@ describe.skipIf(!CHAIN_ENABLED || !DB_ENABLED)("chain: escrow adapter", () => {
   }, 30_000);
 
   afterAll(async () => {
+    if (admin) await resetSenderState(admin, "relayer"); // a later local chain restarts nonces at 0
     await chain?.stop();
     await admin?.end();
     await getPool().end();

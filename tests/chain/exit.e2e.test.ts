@@ -66,7 +66,7 @@ describe.skipIf(!CHAIN_ENABLED || !DB_ENABLED)("chain: attested exit end to end"
     // Fresh chain, persistent database: forget what earlier runs indexed and sent.
     await resetSenderState(admin, "agent");
     await admin.query("delete from public.chain_cursors where contract = $1", [`PrepaidEscrow:${chain.escrow.toLowerCase()}`]);
-    await admin.query("delete from public.prepaid_plans where purchase_tx like '0x%'");
+    await admin.query("delete from public.prepaid_plans where purchase_tx like '0x%' and user_id <> '11111111-1111-4111-8111-111111111111'");
     // Plan ids restart at 1 on a fresh chain, and the demo seed's mock plan uses chain_plan_id 1:
     // spend id 1 on a stranger's plan, which no test user's wallet owns.
     const strangerKey = generatePrivateKey();
@@ -77,6 +77,12 @@ describe.skipIf(!CHAIN_ENABLED || !DB_ENABLED)("chain: attested exit end to end"
   }, 30_000);
 
   afterAll(async () => {
+    // Leave nothing that a later local chain (same addresses, ids from 1) would collide with.
+    if (admin) {
+      await admin.query("delete from public.prepaid_plans where purchase_tx like '0x%' and user_id <> '11111111-1111-4111-8111-111111111111'");
+      await admin.query("delete from public.chain_cursors where contract = $1", [`PrepaidEscrow:${chain.escrow.toLowerCase()}`]);
+      await resetSenderState(admin, "agent");
+    }
     restoreOracle?.();
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];

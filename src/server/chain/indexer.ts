@@ -29,6 +29,8 @@ export type ChainSyncStats = {
   plansUpserted: number;
   sessionsInserted: number;
   unknownMerchant: number;
+  /** The stored cursor was past the chain head, so the run started over from startBlock. */
+  chainReset?: boolean;
   errors: { userId: string; planId?: string; error: string }[];
 };
 
@@ -79,7 +81,14 @@ export async function runChainSync(pool: Pool, cfg: ChainSyncConfig): Promise<Ch
   // transaction confirmed just before this run (the run "right after each confirmed transaction").
   const latest = await cfg.client.getBlockNumber({ cacheTime: 0 });
   const to = latest - BigInt(cfg.confirmations ?? 2);
-  const cursor = await readCursor(pool, cfg.escrow);
+  let cursor = await readCursor(pool, cfg.escrow);
+  if (cursor !== null && cursor > latest) {
+    // The chain we indexed is gone (a restarted local anvil redeploys at the same address).
+    // Start over; upserts and `on conflict do nothing` make the re-scan safe.
+    stats.chainReset = true;
+    await pool.query("delete from public.chain_cursors where contract = $1", [cursorKey(cfg.escrow)]);
+    cursor = null;
+  }
   const from = cursor === null ? cfg.startBlock : cursor + BigInt(1);
   if (to < from) return stats;
   stats.fromBlock = from.toString();
