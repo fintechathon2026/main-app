@@ -82,3 +82,16 @@ test.describe("cancel subscription", () => {
     await expect(page.getByLabel("Message")).toHaveValue("Cancel my iQIYI subscription");
   });
 });
+
+test.describe("sign in", () => {
+  test("without sign in connected, the app opens and the login page says so", async ({ page }) => {
+    await page.goto("/");
+    await expect(page).toHaveURL("/");
+    await expect(page.getByRole("heading", { name: "Needs your OK" })).toBeVisible();
+
+    await page.goto("/login");
+    await expect(page.getByRole("heading", { name: "Sign in is not set up" })).toBeVisible();
+    await page.getByRole("link", { name: "Open Reins" }).click();
+    await expect(page).toHaveURL("/");
+  });
+});
