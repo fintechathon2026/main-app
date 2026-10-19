@@ -96,12 +96,12 @@
 
 - [ ] **R4-01** App shell, auth, layout, component kit; design tokens from the canvas (lime, ink, grey, lavender; Plus Jakarta Sans, Geist Mono) (§15.1) *[Branch `feat/r4-demo-ui`: shell, layout, tokens, kit done. Auth/login screen not built; local demo uses `REINS_DEMO_AUTH=1` + `NEXT_PUBLIC_REINS_DEMO_USER`]*
 - [ ] **R4-02** Move design data to Lin and CNY in the canvas and Figma (rupiah amounts, Indonesian billers → Shenzhen equivalents). Due Sat 12:00
-- [ ] **R4-03** Approval card and feed item rendered from structured fields only (§15.3). Due Sat *[Branch `feat/r4-demo-ui`: approval card done. Feed item waits for `/api/feed` (R2-08)]*
-- [ ] **R4-04** Chat with streaming; approvals inbox; mandate editor with read-back and diff, incl. prepaid rules (§15.2). Due Sat *[Branch `feat/r4-demo-ui`: streaming chat (with bill upload, inline approval) and approvals inbox done. Mandate editor waits for `/api/mandates/*`]*
+- [x] **R4-03** Approval card and feed item rendered from structured fields only (§15.3). Due Sat *[Branch `feat/r4-demo-ui`: approval card and feed item (`/activity`) done]*
+- [x] **R4-04** Chat with streaming; approvals inbox; mandate editor with read-back and diff, incl. prepaid rules (§15.2). Due Sat *[Branch `feat/r4-demo-ui`: streaming chat, approvals inbox, and mandate card + editor (`/mandate`: read-back, diff, narrowing/widening, widening confirm, history) done. Tested on fixtures, not yet against the DB]*
 - [ ] **R4-05** **Prepaid screen**: plans with sessions left and balance in escrow, risk status with signal sources, "test token, no value" tag. Dep: R1-08 fixtures. Due Sat *[Branch `feat/r4-demo-ui`: done against fixtures]*
 - [ ] **R4-06** **Advisor card** (savings, break-even, expected loss with and without escrow, risk source). Due Sat *[Branch `feat/r4-demo-ui`: done]*
 - [ ] **R4-07** **Buy sheet with browser signing:** generate the consumer key (viem), keep it in IndexedDB, register the address, sign permit + purchase, encrypted backup download (§15.3, §24.2). Due Sun 12:00
-- [ ] **R4-08** Subscriptions + recommendations; feed "Why?" with explorer links on prepaid items; evidence screen v1 with the hash list. Due Sun *[Branch `feat/r4-demo-ui`: subscriptions + recommendations + keep-it done. Feed and evidence screen not built]*
+- [x] **R4-08** Subscriptions + recommendations; feed "Why?" with explorer links on prepaid items; evidence screen v1 with the hash list. Due Sun *[Branch `feat/r4-demo-ui`: subscriptions, feed + "Why?" (`/activity`), evidence v1 (`/evidence`: audit verify, JSONL/CSV export, tx hash list, kill switch) done. Run-now buttons and eval report not built]*
 - [ ] **R4-09** **Check-in flow** (scan or paste the gym-tablet payload, sign, submit) and gym-tablet page styling; exit cards (attested exit result, voluntary exit with fee). Due Sun 21:00
 - [ ] **R4-10** Playwright E2E for 5 flows: bill with approval, attack PDF blocked, cancel, mandate edit, prepaid buy → check-in → exit. Due Mon
 - [ ] **R4-11** Mobile polish; PWA manifest and icons. Due Mon *[Branch `feat/r4-demo-ui`: mobile-first layout, manifest and SVG icon done]*
