@@ -72,7 +72,10 @@ export interface EscrowAdapter {
   redeem(a: EscrowRedeemArgs, o: EscrowSendOpts): Promise<ChainResult>;
   /** `attestation` is the oracle-signed record the decision used (`attestationId`). */
   exitWithAttestation(a: { chainPlanId: string; attestationId: string; attestation: AttestationJson }, o: EscrowSendOpts): Promise<ChainResult>;
-  /** Without the owner's VoluntaryExit signature the escrow reverts. */
-  exitVoluntary(a: { chainPlanId: string; deadline?: number; consumerSig?: string }, o: EscrowSendOpts): Promise<ChainResult>;
+  /**
+   * exitVoluntaryBySig (architecture §24.5): `consumerSig` is the owner's EIP-712
+   * VoluntaryExit(planId, deadline) signature; both are required, an unsigned exit does not compile.
+   */
+  exitVoluntary(a: { chainPlanId: string; deadline: number; consumerSig: string }, o: EscrowSendOpts): Promise<ChainResult>;
   lookup(idempotencyKey: string): Promise<ChainResult | null>;
 }

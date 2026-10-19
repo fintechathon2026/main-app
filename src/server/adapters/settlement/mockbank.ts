@@ -165,8 +165,8 @@ export function createMockEscrow(cfg: Cfg & { agentAddress?: string } = {}): Esc
         idempotencyKey: o.idempotencyKey,
         body: {
           caller: agent,
-          ...(a.deadline === undefined ? {} : { deadline: a.deadline }),
-          ...(a.consumerSig === undefined ? {} : { consumerSig: a.consumerSig }),
+          deadline: a.deadline,
+          consumerSig: a.consumerSig,
           idempotency_key: o.idempotencyKey,
         },
       });

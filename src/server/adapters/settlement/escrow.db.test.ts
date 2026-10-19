@@ -81,6 +81,7 @@ describe.skipIf(!DB_ENABLED)("mock escrow adapter", () => {
     const escrow = createMockEscrow({ transport: inProcessTransport, agentAddress: p.agent.address });
     const bought = await escrow.purchase(await signPurchase(p), opts());
     const chainPlanId = String(((bought as { events: { chainPlanId: string }[] }).events[0]).chainPlanId);
+    // @ts-expect-error unsigned call: the interface requires the owner's signature (§24.5); the escrow must still revert at runtime
     expect(await escrow.exitVoluntary({ chainPlanId }, opts())).toMatchObject({ status: "reverted", reason: "consumer_signature_required" });
     const deadline = nowS() + 600;
     const r = await escrow.exitVoluntary({ chainPlanId, deadline, consumerSig: await signVoluntaryExit(p.consumer, chainPlanId, deadline) }, opts());
