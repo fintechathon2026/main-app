@@ -1,0 +1,84 @@
+import { expect, test, type Page } from "@playwright/test";
+
+// The approvals route needs a session, so decisions are answered by a stub. Everything else is
+// the real UI reading fixtures and labelled sample data.
+async function stubDecision(page: Page, status: 200 | 409, body: Record<string, unknown> = {}) {
+  const calls: unknown[] = [];
+  await page.route("**/api/approvals/a0000000-*", async (route) => {
+    calls.push(route.request().postDataJSON());
+    await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  return calls;
+}
+
+// The detail is a right pane on desktop and a bottom sheet on a phone; the other one is hidden.
+const detail = (page: Page) => page.locator("aside:visible, [role=dialog]:visible");
+
+const approved = { approvalId: "a0000000-0000-4000-8000-000000000001", status: "approved", planId: null, resume: null };
+
+test.describe("bill with approval", () => {
+  test("shows what will happen, then approves exactly that bill", async ({ page }) => {
+    const calls = await stubDecision(page, 200, approved);
+    await page.goto("/");
+    await page.getByRole("button", { name: /Pay Landlord Wang/ }).click();
+
+    await expect(detail(page).getByText("Bills over your auto-pay limit need your OK")).toBeVisible();
+    await expect(detail(page).getByText(/saved payee/)).toBeVisible();
+
+    await detail(page).getByRole("button", { name: "Approve ¥3,500.00" }).click();
+    await expect(detail(page).getByRole("status").filter({ hasText: "Approved" })).toBeVisible();
+    expect(calls).toEqual([{ decision: "approve" }]);
+  });
+
+  test("declining sends a reject and nothing happens", async ({ page }) => {
+    const calls = await stubDecision(page, 200, { ...approved, status: "rejected" });
+    await page.goto("/");
+    await page.getByRole("button", { name: /Pay Landlord Wang/ }).click();
+    await detail(page).getByRole("button", { name: "Decline" }).click();
+    await expect(detail(page).getByText("Declined")).toBeVisible();
+    expect(calls).toEqual([{ decision: "reject" }]);
+  });
+
+  test("an already answered request says so and pays nothing", async ({ page }) => {
+    await stubDecision(page, 409);
+    await page.goto("/");
+    await page.getByRole("button", { name: /Pay Landlord Wang/ }).click();
+    await detail(page).getByRole("button", { name: "Approve ¥3,500.00" }).click();
+    await expect(detail(page).getByRole("alert")).toHaveText("This request was already answered.");
+  });
+});
+
+test.describe("attack PDF blocked", () => {
+  test("the blocked payment shows the rule that stopped it and has no approve button", async ({ page }) => {
+    await page.goto("/activity");
+    await page.getByRole("button", { name: /Payment to a new account/ }).click();
+
+    await expect(detail(page).getByText("Rule check")).toBeVisible();
+    await expect(detail(page).getByText("The account is not in your saved payees")).toBeVisible();
+    await expect(detail(page).getByText("Blocked").first()).toBeVisible();
+    await expect(detail(page).getByText("Agent's note")).toBeVisible();
+    await expect(detail(page).getByRole("button", { name: /Approve/ })).toHaveCount(0);
+  });
+});
+
+test.describe("cancel subscription", () => {
+  test("asks for an OK first, then cancels only after it", async ({ page }) => {
+    const calls = await stubDecision(page, 200, { ...approved, approvalId: "a0000000-0000-4000-8000-000000000002" });
+    await page.goto("/");
+    await page.getByRole("button", { name: /Cancel iQIYI/ }).click();
+    await expect(detail(page).getByRole("button", { name: "Keep it" })).toBeVisible();
+    expect(calls).toEqual([]);
+
+    await detail(page).getByRole("button", { name: "Cancel it" }).click();
+    await expect(detail(page).getByText("Approved")).toBeVisible();
+    expect(calls).toEqual([{ decision: "approve" }]);
+  });
+
+  test("Ask Reins to cancel opens chat with the request filled in", async ({ page }) => {
+    await page.goto("/subscriptions");
+    await page.getByRole("button", { name: /iQIYI/ }).first().click();
+    await page.getByRole("link", { name: "Ask Reins to cancel" }).click();
+    await expect(page).toHaveURL(/\/chat\?ask=/);
+    await expect(page.getByLabel("Message")).toHaveValue("Cancel my iQIYI subscription");
+  });
+});
