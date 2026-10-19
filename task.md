@@ -105,7 +105,7 @@
 - [ ] **R4-09** **Check-in flow** (scan or paste the gym-tablet payload, sign, submit) and gym-tablet page styling; exit cards (attested exit result, voluntary exit with fee). Due Sun 21:00
 - [ ] **R4-10** Playwright E2E for 5 flows: bill with approval, attack PDF blocked, cancel, mandate edit, prepaid buy → check-in → exit. Due Mon
 - [ ] **R4-11** Mobile polish; PWA manifest and icons. Due Mon *[Branch `feat/r4-demo-ui`: mobile-first layout, manifest and SVG icon done]*
-- [ ] **R4-12** Screenshots for deck and docs; UX section of the tech doc. Due Mon 20:00
+- [ ] **R4-12** Screenshots for deck and docs; UX section of the tech doc. Due Mon 20:00 *[Branch `feat/r4-demo-ui`: screenshots in `docs/submission/screenshots/`. UX section not written]*
 - [ ] **R4-13** Record the demo video with R5 (Section 9). Due Tue 15:00
 
 ## 6. R5 Finance and Product
