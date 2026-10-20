@@ -202,7 +202,7 @@ These are open on purpose or open because the work is not done. KR-1 to KR-7 are
 |---|---|---|---|---|
 | KR-1 | **The escrow contract is not audited.** It is in the tree (`contracts/src/PrepaidEscrow.sol`) but not deployed, and it is not the default (KR-17) | A contract bug could lock funds or pay the wrong address (T24). A Gate bug could then no longer be caught by the second layer. See C1 to C9 in §3.1 | R3 builds; R2 second review (R2-10) | Testnet and valueless token only. Say "not audited" on the slide and in the README. Foundry pass count: **pending (R3)**. Second review: **pending (R2)** |
 | KR-2 | **The registry (oracle) is simulated.** One oracle key decides which exits are valid (T21) | A leaked or wrong oracle key can trigger early exits. Worst case is a refund to the owner, which hurts the merchant's cash flow | R3 | v1 only. A real registry needs several sources and a dispute window (release R1) |
-| KR-3 | **The R0 mandate "signature" is a hash.** `src/server/executor/snapshot.ts` marks a mandate valid when its stored hash matches its stored policy. The routes to create, sign and store a mandate (`/api/mandates/*`) are not built | Anyone who can write the database can write a matching hash. G6 holds for the agent, not for a database writer | R2 (R2-08) | Passkey signing in release R1 |
+| KR-3 | **The R0 mandate "signature" is a hash.** `src/server/executor/snapshot.ts:86-88` marks a mandate valid when its stored hash matches its stored policy (a comment there says "no passkey yet"). The routes to create, sign and store a mandate (`/api/mandates/*`) are not built | Anyone who can write the database can write a matching hash. G6 holds for the agent, not for a database writer | R2 (R2-08) | Passkey signing in release R1 |
 | KR-4 | **R0 approvals are authenticated by the session only** (T13, PRD §10.5) | A stolen session can approve actions. The approval is still hash-bound, single-use and expiring | R2 | Passkeys arrive in release R1 |
 | KR-5 | **Fake check-ins and the merchant key** (T22). The merchant simulator signs check-ins. The release still needs the owner's signature | Depends on the device key staying safe. The merchant simulator key is read by `src/sim/merchant/keys.ts:16` in the same app that holds the relayer and agent keys | R3 | Contract enforces two signatures (`PrepaidEscrow.sol:165-167`) |
 | KR-6 | **Agent key and relayer key** (T23, T26). Read only at `chain/escrow.ts:327-328`. The key-read lint rule is on main (`eslint.config.mjs:85-102`) | A server compromise yields both keys, and the oracle and merchant simulator keys if they share the deployment. The lint rule does not cover tests, scripts or computed property names (§3.2) | R3 | Keep keys in separate env scopes for a public demo. Not run for this update: `pnpm lint` |
@@ -255,7 +255,49 @@ The utility cost of the Gate (tasks lost to false blocks) will be reported next 
 - **Availability.** A kill switch, a stale rate or a failed adapter stops actions. We do not promise uptime.
 - **Prompt, model and dependency supply chain.** Versions are pinned. CI (`.github/workflows/ci.yml`) runs lint, typecheck and test only. `pnpm audit` is not run. We do not claim more.
 
-## 8. Before the final (Tuesday 12:00)
+## 8. How to re-check
+
+Run these from the repo root unless noted. The first block needs no database.
+
+```bash
+pnpm lint            # module boundaries, adapter import rule, private-key read rules
+pnpm typecheck       # next typegen + tsc --noEmit
+pnpm test            # Vitest; DB and chain suites are skipped without their setup
+```
+
+The database suites (G3, G4, G5, G7 and the user-prepaid flows) need local Supabase:
+
+```bash
+pnpm exec supabase start
+pnpm exec supabase db reset
+set -a; . ./.env.local; set +a; pnpm test
+```
+
+The contract tests need the submodules (forge-std and OpenZeppelin), then Foundry:
+
+```bash
+git submodule update --init --recursive
+cd contracts
+forge test                           # unit, fuzz, invariant (default profile)
+FOUNDRY_PROFILE=ci forge test        # what CI runs: more fuzz and invariant runs
+```
+
+The chain suites (`tests/chain/*`) start a private anvil and deploy from `contracts/out`. They are skipped unless `anvil` is on the path and `forge build` has been run in `contracts/` (`tests/chain/anvil.ts:50`). The adapter and exit tests also need `DATABASE_URL` (`tests/chain/adapter.test.ts:25`). With the env above loaded:
+
+```bash
+(cd contracts && forge build)
+pnpm vitest run tests/chain
+```
+
+The browser flows run on fixtures. Stop `pnpm dev` first, because both use `.next`:
+
+```bash
+pnpm exec playwright test
+```
+
+Two quick checks that need no setup: `grep -rn "REINS_EVAL_DISABLE_GATE" src app scripts` (empty means the guard is still pending), and `ls contracts/deployments` (only `.gitkeep` means nothing is deployed).
+
+## 9. Before the final (Tuesday 12:00)
 
 1. Run the full suite with the local Supabase loaded and put the real counts in §3. Owner: R2.
 2. Fill §6 from the eval runner. Owner: R2.
