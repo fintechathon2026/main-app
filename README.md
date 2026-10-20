@@ -65,6 +65,39 @@ These are the guarantees the code enforces. The full list is in [`AGENTS.md`](AG
 - **Escrowed money has two exits only:** the merchant (one session at a time, with two signatures) or back to you.
 - **Everything is on the record.** The log is append-only and hash-chained, so a change or deletion shows up in the tamper check.
 
+## Architecture
+
+One Next.js app and one Postgres database. The AI proposes. A plain program decides. One piece of trusted code acts.
+
+```mermaid
+flowchart LR
+  U["User<br/>phone or laptop"] --> UI["Screens and API routes<br/>Next.js on Vercel"]
+  UI --> AG["Agent<br/>reads documents, plans,<br/>only proposes"]
+  AG --> AC[("Saved actions<br/>with an action hash")]
+  AC --> GT{"Policy Gate<br/>allow, ask or deny"}
+  GT -- "ask" --> AP["Approval card<br/>one action, once"]
+  AP --> EX
+  GT -- "allow" --> EX["Executor<br/>re-checks the Gate,<br/>runs at most once"]
+  EX --> BK["Mock bank<br/>bills and subscriptions"]
+  EX --> CH["Escrow contract<br/>prepaid packages"]
+  EX --> LG[("Audit log<br/>hash-chained")]
+  DB[("Supabase Postgres<br/>row-level security")] --- UI
+```
+
+**How to read it**
+
+| Step | What happens | Who is trusted |
+|---|---|---|
+| Agent | Reads a bill or notice in a sandbox with no tools, then proposes an action as ids and amounts | Not trusted. Document text can inform a suggestion but never decides who gets paid |
+| Policy Gate | A pure function checks the action against your signed rules and names the rule it used | Trusted code, no AI |
+| Approval | You approve exactly one action; the approval is tied to its hash and expires | You |
+| Executor | The only code that can move money. It checks the Gate again at that moment, reserves your daily limit, then calls the bank or the contract | Trusted code |
+| Audit log | Every decision is written once and linked to the one before it | Anyone can verify |
+
+**Prepaid packages.** You buy a package with a key made in your browser, which the server never sees. Each session needs your signature and the gym's. If the business closes, a signed official notice lets the agent send the unused money back, and the contract only allows it to go to you.
+
+Read more: [`docs/submission/system-architecture.md`](docs/submission/system-architecture.md) (one page) and [`docs/architecture.md`](docs/architecture.md) (full detail).
+
 ## What is real and what is simulated
 
 We want you to know exactly what you are looking at.
