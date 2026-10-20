@@ -1,0 +1,245 @@
+[
+  {
+    "id": "ac000000-0000-4000-8000-000000000001",
+    "at": "2026-10-19T02:40:00.000Z",
+    "status": "ask",
+    "title": "Cancel iQIYI?",
+    "detail": "Cancelling a subscription needs your OK.",
+    "amount": {
+      "amount": 30,
+      "currency": "CNY"
+    },
+    "ruleIds": [
+      "subscriptions.cancel"
+    ],
+    "mandateVersion": 3,
+    "origins": [
+      {
+        "origin": "mock_bank",
+        "label": "Bank: iQIYI charge"
+      }
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The subscription is yours",
+        "passed": true
+      },
+      {
+        "label": "Cancelling a subscription needs your OK",
+        "passed": false
+      }
+    ]
+  },
+  {
+    "id": "ac000000-0000-4000-8000-000000000002",
+    "at": "2026-10-19T01:12:00.000Z",
+    "status": "ask",
+    "title": "Pay Landlord Wang?",
+    "detail": "The amount is over your auto-pay limit, so it waits for your OK.",
+    "amount": {
+      "amount": 3500,
+      "currency": "CNY"
+    },
+    "ruleIds": [
+      "bills.auto_pay_max"
+    ],
+    "mandateVersion": 3,
+    "origins": [
+      {
+        "origin": "registry",
+        "label": "Payee: Landlord Wang (saved payee)"
+      },
+      {
+        "origin": "mock_bank",
+        "label": "Bill: due 28 Oct"
+      }
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The payee comes from your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount matches the bill",
+        "passed": true
+      },
+      {
+        "label": "The amount comes from a trusted source",
+        "passed": true
+      },
+      {
+        "label": "The payee is one of your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount is over your auto-pay limit",
+        "passed": false
+      },
+      {
+        "label": "Today's total stays under your daily limit",
+        "passed": true
+      }
+    ]
+  },
+  {
+    "id": "ac000000-0000-4000-8000-000000000003",
+    "at": "2026-10-18T09:05:00.000Z",
+    "status": "blocked",
+    "title": "Payment to a new account",
+    "detail": "Nothing was paid. The account is not in your saved payees.",
+    "amount": {
+      "amount": 186,
+      "currency": "CNY"
+    },
+    "ruleIds": [
+      "provenance.destination"
+    ],
+    "mandateVersion": 3,
+    "origins": [
+      {
+        "origin": "email",
+        "label": "Email: bill amount (not trusted for payments)"
+      }
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The account is not in your saved payees",
+        "passed": false
+      }
+    ]
+  },
+  {
+    "id": "ac000000-0000-4000-8000-000000000004",
+    "at": "2026-10-18T08:30:02.000Z",
+    "status": "done",
+    "title": "China Mobile paid",
+    "detail": "Paid for the bill due 20 Oct.",
+    "amount": {
+      "amount": 88,
+      "currency": "CNY"
+    },
+    "ruleIds": [
+      "global.kill_switch",
+      "schema.pay_bill",
+      "mandate.valid",
+      "provenance.destination",
+      "provenance.amount_mismatch",
+      "provenance.amount",
+      "payees.allow",
+      "bills.auto_pay_max",
+      "global.daily_outflow_cap"
+    ],
+    "mandateVersion": 3,
+    "origins": [
+      {
+        "origin": "registry",
+        "label": "Payee: China Mobile (saved payee)"
+      },
+      {
+        "origin": "mock_bank",
+        "label": "Bill: due 20 Oct"
+      }
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The payee comes from your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount matches the bill",
+        "passed": true
+      },
+      {
+        "label": "The amount comes from a trusted source",
+        "passed": true
+      },
+      {
+        "label": "The payee is one of your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount is within your auto-pay limit",
+        "passed": true
+      },
+      {
+        "label": "Today's total stays under your daily limit",
+        "passed": true
+      }
+    ]
+  },
+  {
+    "id": "ac000000-0000-4000-8000-000000000006",
+    "at": "2026-10-10T11:30:00.000Z",
+    "status": "done",
+    "title": "FitBox Futian session used",
+    "detail": "One session was released to the business after you and the business both signed.",
+    "amount": {
+      "amount": 100,
+      "currency": "CNY"
+    },
+    "ruleIds": [
+      "prepaid.redeem"
+    ],
+    "mandateVersion": 3,
+    "origins": [
+      {
+        "origin": "chain",
+        "label": "Blockchain: test network"
+      }
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The package is yours",
+        "passed": true
+      },
+      {
+        "label": "You and the gym both signed this session",
+        "passed": true
+      }
+    ],
+    "tx": {
+      "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070",
+      "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070"
+    }
+  }
+]

@@ -12,6 +12,36 @@ export const hash64 = z.string().regex(/^[0-9a-f]{64}$/);
 export const UiStatus = z.enum(["done", "ask", "suggest", "blocked"]);
 
 const TxLink = z.strictObject({ hash: z.string().min(1), explorerUrl: z.string() });
+const Money = z.strictObject({ amount: z.number(), currency: z.string().regex(/^[A-Z]{3}$/) });
+const Origin = z.enum([
+  "user", "registry", "mock_bank", "aggregator", "fx_provider", "chain", "oracle", "email", "document", "notification", "csv", "web", "simulated",
+]);
+const Decision = z.enum(["allow", "require_confirm", "deny"]);
+
+export const FeedCheck = z.strictObject({ label: z.string().min(1), passed: z.boolean() });
+export const FeedItem = z.strictObject({
+  id: z.string().min(1),
+  at: iso,
+  status: UiStatus,
+  title: z.string().min(1),
+  detail: z.string().min(1),
+  amount: Money.optional(),
+  ruleIds: z.array(z.string().min(1)),
+  mandateVersion: z.number().int().positive(),
+  origins: z.array(z.strictObject({ origin: Origin, label: z.string().min(1), simulated: z.boolean().optional() })),
+  checks: z.array(FeedCheck),
+  tx: TxLink.optional(),
+});
+export const FeedResponse = z.array(FeedItem);
+export const FeedWhyResponse = z.strictObject({
+  id: z.string().min(1),
+  status: UiStatus,
+  decision: Decision.nullable(),
+  mandateVersion: z.number().int().positive(),
+  mandateHash: hash64.nullable(),
+  ruleIds: z.array(z.string().min(1)),
+  checks: z.array(FeedCheck),
+});
 
 export const AuditVerifyRow = z.strictObject({
   seq: z.number().int().positive(),
@@ -36,6 +66,10 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<X extends true> = X;
 export type Checks = [
   Assert<Equal<z.infer<typeof UiStatus>, T.UiStatus>>,
+  Assert<Equal<z.infer<typeof FeedCheck>, T.FeedCheck>>,
+  Assert<Equal<z.infer<typeof FeedItem>, T.FeedItem>>,
+  Assert<Equal<z.infer<typeof FeedResponse>, T.FeedResponse>>,
+  Assert<Equal<z.infer<typeof FeedWhyResponse>, T.FeedWhyResponse>>,
   Assert<Equal<z.infer<typeof AuditVerifyRow>, T.AuditVerifyRow>>,
   Assert<Equal<z.infer<typeof AuditVerifyResponse>, T.AuditVerifyResponse>>,
 ];

@@ -7,10 +7,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { z } from "zod";
+import { z } from "zod";
 import { GENESIS_HASH, auditHash } from "@/src/server/audit";
 import { type AuditEntry, buildAuditVerify } from "@/src/server/db/read/audit-view";
+import { buildFeed, buildWhy } from "@/src/server/db/read/feed-view";
 import * as S from "./api-schemas";
+import { LIN_FEED_ROWS } from "./seed";
 
 const DIR = join(process.cwd(), "fixtures", "api");
 const LIN = "11111111-1111-4111-8111-111111111111";
@@ -54,11 +56,15 @@ function generate(): Record<string, unknown> {
   const entries = chain();
   return {
     "audit-verify.json": buildAuditVerify({ ok: true, count: entries.length, firstBreakSeq: null }, entries, NOW),
+    "feed.json": buildFeed(LIN_FEED_ROWS),
+    "feed-why.json": Object.fromEntries(LIN_FEED_ROWS.map((r) => [r.id, buildWhy(r)])),
   };
 }
 
 const SCHEMAS: Record<string, z.ZodType> = {
   "audit-verify.json": S.AuditVerifyResponse,
+  "feed.json": S.FeedResponse,
+  "feed-why.json": z.record(z.string(), S.FeedWhyResponse),
 };
 
 const read = (f: string) => JSON.parse(readFileSync(join(DIR, f), "utf8")) as unknown;

@@ -1,0 +1,178 @@
+{
+  "ac000000-0000-4000-8000-000000000002": {
+    "id": "ac000000-0000-4000-8000-000000000002",
+    "status": "ask",
+    "decision": "require_confirm",
+    "mandateVersion": 3,
+    "mandateHash": "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c",
+    "ruleIds": [
+      "bills.auto_pay_max"
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The payee comes from your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount matches the bill",
+        "passed": true
+      },
+      {
+        "label": "The amount comes from a trusted source",
+        "passed": true
+      },
+      {
+        "label": "The payee is one of your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount is over your auto-pay limit",
+        "passed": false
+      },
+      {
+        "label": "Today's total stays under your daily limit",
+        "passed": true
+      }
+    ]
+  },
+  "ac000000-0000-4000-8000-000000000001": {
+    "id": "ac000000-0000-4000-8000-000000000001",
+    "status": "ask",
+    "decision": "require_confirm",
+    "mandateVersion": 3,
+    "mandateHash": "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c",
+    "ruleIds": [
+      "subscriptions.cancel"
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The subscription is yours",
+        "passed": true
+      },
+      {
+        "label": "Cancelling a subscription needs your OK",
+        "passed": false
+      }
+    ]
+  },
+  "ac000000-0000-4000-8000-000000000003": {
+    "id": "ac000000-0000-4000-8000-000000000003",
+    "status": "blocked",
+    "decision": "deny",
+    "mandateVersion": 3,
+    "mandateHash": "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c",
+    "ruleIds": [
+      "provenance.destination"
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The account is not in your saved payees",
+        "passed": false
+      }
+    ]
+  },
+  "ac000000-0000-4000-8000-000000000004": {
+    "id": "ac000000-0000-4000-8000-000000000004",
+    "status": "done",
+    "decision": "allow",
+    "mandateVersion": 3,
+    "mandateHash": "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c",
+    "ruleIds": [
+      "global.kill_switch",
+      "schema.pay_bill",
+      "mandate.valid",
+      "provenance.destination",
+      "provenance.amount_mismatch",
+      "provenance.amount",
+      "payees.allow",
+      "bills.auto_pay_max",
+      "global.daily_outflow_cap"
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The payee comes from your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount matches the bill",
+        "passed": true
+      },
+      {
+        "label": "The amount comes from a trusted source",
+        "passed": true
+      },
+      {
+        "label": "The payee is one of your saved payees",
+        "passed": true
+      },
+      {
+        "label": "The amount is within your auto-pay limit",
+        "passed": true
+      },
+      {
+        "label": "Today's total stays under your daily limit",
+        "passed": true
+      }
+    ]
+  },
+  "ac000000-0000-4000-8000-000000000006": {
+    "id": "ac000000-0000-4000-8000-000000000006",
+    "status": "done",
+    "decision": "allow",
+    "mandateVersion": 3,
+    "mandateHash": "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c",
+    "ruleIds": [
+      "prepaid.redeem"
+    ],
+    "checks": [
+      {
+        "label": "Reins is not paused",
+        "passed": true
+      },
+      {
+        "label": "Your rules are signed and current (version 3)",
+        "passed": true
+      },
+      {
+        "label": "The package is yours",
+        "passed": true
+      },
+      {
+        "label": "You and the gym both signed this session",
+        "passed": true
+      }
+    ]
+  }
+}
