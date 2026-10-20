@@ -59,7 +59,6 @@ function chain(): AuditEntry[] {
 
 const COMPILE_TEXT = "Pay bills up to 200 yuan for SZ_POWER and CHINA_MOBILE. Never more than 500 a day. Ask me before cancelling.";
 
-const FIXTURE_DIRECTION: Record<number, "less" | "more"> = { 2: "less", 3: "more" };
 
 /** What the compiler model drafts for the sample text; compile() fills the rest and reads it back. */
 const COMPILE_DRAFT = {
@@ -93,9 +92,7 @@ async function generate(): Promise<Record<string, unknown>> {
     "mandates-activate.json": await activateFixture(),
     "audit-verify.json": buildAuditVerify({ ok: true, count: entries.length, firstBreakSeq: null }, entries, NOW),
     "mandates-active.json": buildActive(LIN_MANDATE_ROWS.find((r) => r.status === "active")!),
-    // TODO(R2): drop the override when buildHistory classifies with compareMandates
-    // (src/core/mandate/narrow.ts). Until then only the fixture shows less/more.
-    "mandates-history.json": buildHistory(LIN_MANDATE_ROWS).map((v) => ({ ...v, direction: FIXTURE_DIRECTION[v.version] ?? v.direction })),
+    "mandates-history.json": buildHistory(LIN_MANDATE_ROWS),
     "feed.json": buildFeed(LIN_FEED_ROWS),
     "feed-why.json": Object.fromEntries(LIN_FEED_ROWS.map((r) => [r.id, buildWhy(r)])),
   };

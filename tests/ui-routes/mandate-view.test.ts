@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { hashPolicy } from "@/src/core/mandate/canonical";
 import { LIN_MANDATE_V3 } from "@/src/core/mandate/examples";
-import { MandateRowError, buildActive, buildHistory, describeChange } from "@/src/server/db/read/mandate-view";
+import { type MandateRow, MandateRowError, buildActive, buildHistory, describeChange } from "@/src/server/db/read/mandate-view";
 import { LIN_MANDATE_ROWS } from "./seed";
 
 const v3 = LIN_MANDATE_ROWS[2]!;
@@ -41,8 +41,32 @@ describe("buildHistory", () => {
     expect(h.map((v) => v.status)).toEqual(["active", "superseded", "superseded"]);
   });
 
-  it("classifies only the first version until compareMandates is wired in", () => {
-    expect(buildHistory(LIN_MANDATE_ROWS).map((v) => v.direction)).toEqual([null, null, "first"]);
+  it("classifies every later version against the one before it with compareMandates", () => {
+    // v2 lowers auto-pay (narrowing), v3 adds prepaid permissions (widening).
+    expect(buildHistory(LIN_MANDATE_ROWS).map((v) => v.direction)).toEqual(["more", "less", "first"]);
+  });
+  describe("direction", () => {
+    const row = (version: number, policy: object): MandateRow => {
+      const p = { ...policy, version };
+      return { version, policyJson: p, policyHash: hashPolicy(p), signedAt: `2026-10-0${version}T00:00:00.000Z`, status: "superseded", createdVia: "nl" };
+    };
+    const dir = (next: object) => buildHistory([row(1, LIN_MANDATE_V3), row(2, next)])[0]!.direction;
+    it("narrowing is less permission", () => {
+      expect(dir({ ...LIN_MANDATE_V3, global: { daily_outflow_cap: 500 } })).toBe("less");
+    });
+    it("widening is more permission", () => {
+      expect(dir({ ...LIN_MANDATE_V3, global: { daily_outflow_cap: 5000 } })).toBe("more");
+    });
+    it("incomparable (mixed) is more permission", () => {
+      expect(dir({ ...LIN_MANDATE_V3, bills: { ...LIN_MANDATE_V3.bills, auto_pay_max: 100 }, global: { daily_outflow_cap: 5000 } })).toBe("more");
+    });
+    it("equivalent is null: nothing changed in permission", () => {
+      expect(dir({ ...LIN_MANDATE_V3, payees: { ...LIN_MANDATE_V3.payees, allow: [...LIN_MANDATE_V3.payees.allow].reverse() } })).toBeNull();
+    });
+    it("refuses a stored policy that fails the strict schema", () => {
+      const bad = { ...LIN_MANDATE_V3, surprise: true };
+      expect(() => buildHistory([row(1, LIN_MANDATE_V3), row(2, bad)])).toThrow(/not valid/);
+    });
   });
 
   it("fails on any row whose stored hash does not match its policy, like the active card", () => {

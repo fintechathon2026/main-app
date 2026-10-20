@@ -2,10 +2,11 @@
 // (architecture §13, §15.2). Pure. The active policy is parsed with the strict schema and its
 // stored hash is re-checked, so a tampered or malformed row is an error, never a card. Change
 // sentences come from a template table over the field-by-field difference of two stored
-// policies; no model text (G6).
+// policies; no model text (G6). History directions come from compareMandates.
 
 import { hashPolicy } from "@/src/core/mandate/canonical";
-import { parsePolicy } from "@/src/core/mandate/schema";
+import { compareMandates } from "@/src/core/mandate/narrow";
+import { type Policy, parsePolicy } from "@/src/core/mandate/schema";
 import type { MandateActiveResponse, MandateHistoryResponse, MandateVersion } from "../../api-types";
 
 export type MandateRow = {
@@ -94,15 +95,27 @@ export function describeChange(prev: Json | null, next: Json): string {
 
 const parseLeaf = (s: string | undefined): Json => (s === undefined ? undefined : (JSON.parse(s) as Json));
 
+/** Less/more permission than the previous version (compareMandates). Mixed counts as more. */
+function directionOf(prev: Policy, next: Policy): MandateVersion["direction"] {
+  const { relation } = compareMandates(prev, next);
+  if (relation === "narrowing") return "less";
+  if (relation === "equivalent") return null; // nothing changed in permission
+  return "more"; // widening, or incomparable (mixed = widening, architecture §9.1)
+}
+
 /**
- * Newest first. `direction` is only "first" for version 1 here.
- * TODO(R2): classify every later version as less/more with compareMandates from
- * src/core/mandate/narrow.ts once that branch lands; until then it is null (not classified).
+ * Newest first. Version 1 is "first"; every later version is compared with the one before it:
+ * narrowing = "less", widening or incomparable = "more", equivalent = null.
  */
 export function buildHistory(rows: MandateRow[]): MandateHistoryResponse {
-  // Same integrity rule as the active card: a row whose stored hash does not match is an error.
+  // Same integrity rules as the active card: a row whose stored hash does not match, or whose
+  // policy fails the strict schema, is an error.
+  const policies = new Map<number, Policy>();
   for (const r of rows) {
     if (hashPolicy(r.policyJson) !== r.policyHash) throw new MandateRowError(`stored mandate v${r.version} hash does not match its policy`);
+    const parsed = parsePolicy(r.policyJson);
+    if (!parsed.ok) throw new MandateRowError(`stored mandate v${r.version} is not valid: ${parsed.errors.join("; ")}`);
+    policies.set(r.version, parsed.policy);
   }
   const asc = [...rows].sort((x, y) => x.version - y.version);
   return asc
@@ -110,7 +123,7 @@ export function buildHistory(rows: MandateRow[]): MandateHistoryResponse {
       version: r.version,
       signedAt: r.signedAt,
       change: describeChange(i === 0 ? null : asc[i - 1]!.policyJson, r.policyJson),
-      direction: i === 0 ? "first" : null,
+      direction: i === 0 ? "first" : directionOf(policies.get(asc[i - 1]!.version)!, policies.get(r.version)!),
       status: r.status,
     }))
     .reverse();
