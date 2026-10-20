@@ -225,6 +225,42 @@ describe("non-canonical signatures", () => {
   });
 });
 
+describe("never throws", () => {
+  const expected = { owner: consumer.address, merchant: merchant.address, agent: agent.address, storedOffer: stored, nowSeconds: NOW };
+  const failing = { merchantSigValid: false, consumerSigValid: false, termsMatchStored: false, merchantReason: "malformed_message", consumerReason: "malformed_message" };
+
+  it("returns failing facts for null or undefined input parts", async () => {
+    const ok = { offer: stored, merchantSig: await signOffer(stored), auth, consumerSig: await signAuth(auth) };
+    for (const bad of [null, undefined, { ...ok, offer: null }, { ...ok, offer: undefined }, { ...ok, auth: null }, { ...ok, auth: undefined }]) {
+      expect(await purchaseSignatureFacts(domain, bad as never, expected)).toMatchObject(failing);
+    }
+    expect(await purchaseSignatureFacts(domain, ok, { ...expected, storedOffer: null as never })).toMatchObject(failing);
+    expect(await purchaseSignatureFacts(domain, ok, null as never)).toMatchObject(failing);
+  });
+
+  it.each([Number.NaN, -1, 1.5, Number.POSITIVE_INFINITY, "x" as never])("returns failing facts for nowSeconds %j", async (now) => {
+    const ok = { offer: stored, merchantSig: await signOffer(stored), auth, consumerSig: await signAuth(auth) };
+    expect(await purchaseSignatureFacts(domain, ok, { ...expected, nowSeconds: now })).toMatchObject(failing);
+  });
+
+  it("verify functions return a failure for a null offer or auth", async () => {
+    expect(await verifyMerchantOffer(domain, null as never, await signOffer(stored), offerExpect)).toEqual({ ok: false, reason: "malformed_message" });
+    expect(await verifyConsumerPurchaseAuth(domain, null as never, await signAuth(auth), authExpect)).toEqual({ ok: false, reason: "malformed_message" });
+  });
+});
+
+describe("agent expectation", () => {
+  it("omitted/undefined skips the agent check, null fails it, a different address fails it", async () => {
+    const sig = await signAuth(auth);
+    const base = { owner: consumer.address, offerHash: storedHash, nowSeconds: NOW };
+    expect((await verifyConsumerPurchaseAuth(domain, auth, sig, base)).ok).toBe(true);
+    expect((await verifyConsumerPurchaseAuth(domain, auth, sig, { ...base, agent: undefined })).ok).toBe(true);
+    expect(await verifyConsumerPurchaseAuth(domain, auth, sig, { ...base, agent: null })).toEqual({ ok: false, reason: "agent_mismatch" });
+    expect(await verifyConsumerPurchaseAuth(domain, auth, sig, { ...base, agent: stranger.address })).toEqual({ ok: false, reason: "agent_mismatch" });
+    expect((await verifyConsumerPurchaseAuth(domain, auth, sig, { ...base, agent: agent.address })).ok).toBe(true);
+  });
+});
+
 describe("recover helpers", () => {
   it("return the signer, or null when unparsable", async () => {
     expect(await recoverOfferSigner(domain, stored, await signOffer(stored))).toBe(merchant.address);

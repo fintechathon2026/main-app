@@ -150,7 +150,10 @@ export async function verifyMerchantOffer(
 export type ConsumerAuthExpectation = {
   /** The user's consumer_browser wallet address. */
   owner: string;
-  /** Agent address the plan will name (AGENT_ADDRESS) when it must be fixed; omit to skip the check. */
+  /**
+   * Agent address the plan must name (AGENT_ADDRESS). `undefined` (omitted) skips the agent check;
+   * `null` means "no agent may be named" and fails with `agent_mismatch` for any auth.
+   */
   agent?: string | null;
   /** EIP-712 digest of the offer this purchase is for (from `verifyMerchantOffer`). */
   offerHash: string;
@@ -197,6 +200,7 @@ export type PurchaseSignatureInput = {
 export type PurchaseExpectation = {
   owner: string;
   merchant: string;
+  /** As `ConsumerAuthExpectation.agent`: omitted skips the check, `null` always fails it. */
   agent?: string | null;
   storedOffer: OfferJson;
   nowSeconds: number;
@@ -209,7 +213,7 @@ export type PurchaseExpectation = {
  * `termsMatchStored` is also reported on its own). The consumer's PurchaseAuth is checked against
  * the digest of the offer as supplied, so it must bind exactly that offer.
  */
-export async function purchaseSignatureFacts(
+async function purchaseSignatureFactsUnchecked(
   domain: TypedDataDomain,
   input: PurchaseSignatureInput,
   expected: PurchaseExpectation,
@@ -247,4 +251,32 @@ export async function purchaseSignatureFacts(
     merchantReason: merchant.ok ? null : merchant.reason,
     consumerReason: consumer.ok ? null : consumer.reason,
   };
+}
+
+const MALFORMED_FACTS: PurchaseSignatureFacts = {
+  merchantSigValid: false,
+  expired: true,
+  termsMatchStored: false,
+  consumerSigValid: false,
+  merchantReason: "malformed_message",
+  consumerReason: "malformed_message",
+};
+
+const isObject = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null;
+
+/** Same as `purchaseSignatureFacts` logic, but never throws: null or non-object input, or a bad clock, yields failing facts. */
+export async function purchaseSignatureFacts(
+  domain: TypedDataDomain,
+  input: PurchaseSignatureInput,
+  expected: PurchaseExpectation,
+): Promise<PurchaseSignatureFacts> {
+  if (!isObject(input) || !isObject(input.offer) || !isObject(input.auth) || !isObject(expected) || !isObject(expected.storedOffer)) {
+    return { ...MALFORMED_FACTS };
+  }
+  if (!Number.isSafeInteger(expected.nowSeconds) || expected.nowSeconds < 0) return { ...MALFORMED_FACTS };
+  try {
+    return await purchaseSignatureFactsUnchecked(domain, input, expected);
+  } catch {
+    return { ...MALFORMED_FACTS };
+  }
 }

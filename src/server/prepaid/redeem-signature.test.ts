@@ -182,6 +182,26 @@ describe("non-canonical signatures", () => {
   });
 });
 
+describe("never throws", () => {
+  it.each([Number.NaN, -1, 1.5, Number.POSITIVE_INFINITY, "x" as never])("rejects nowSeconds %j as malformed_message", async (now) => {
+    expect(await verifyRedeemSignatures(domain, await good(), { ...expected, nowSeconds: now })).toEqual({
+      ok: false,
+      reason: "malformed_message",
+      consumerSigValid: false,
+      merchantSigValid: false,
+    });
+  });
+
+  it("rejects null or undefined input and a null redeem", async () => {
+    const g = await good();
+    for (const bad of [null, undefined, { ...g, redeem: null }, { ...g, redeem: undefined }]) {
+      expect(await verifyRedeemSignatures(domain, bad as never, expected)).toMatchObject({ ok: false, reason: "malformed_message" });
+    }
+    expect(await verifyRedeemSignatures(domain, g, null as never)).toMatchObject({ ok: false, reason: "malformed_message" });
+    expect(await verifyRedeemSignatures(domain, g, { ...expected, owner: null as never })).toMatchObject({ ok: false });
+  });
+});
+
 describe("recoverRedeemSigner", () => {
   it("returns the signer, or null when unparsable", async () => {
     expect(await recoverRedeemSigner(domain, redeem, await sign(redeem, consumer))).toBe(consumer.address);

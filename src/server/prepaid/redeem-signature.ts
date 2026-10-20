@@ -92,6 +92,16 @@ export async function verifyRedeemSignatures(
   input: RedeemSignatureInput,
   expected: RedeemExpectation,
 ): Promise<RedeemSignatureResult> {
+  try {
+    return await verifyUnchecked(domain, input, expected);
+  } catch {
+    return fail("malformed_message");
+  }
+}
+
+async function verifyUnchecked(domain: TypedDataDomain, input: RedeemSignatureInput, expected: RedeemExpectation): Promise<RedeemSignatureResult> {
+  if (typeof input !== "object" || input === null || typeof expected !== "object" || expected === null) return fail("malformed_message");
+  if (!Number.isSafeInteger(expected.nowSeconds) || expected.nowSeconds < 0) return fail("malformed_message");
   if (!ADDRESS_RE.test(expected.owner) || !ADDRESS_RE.test(expected.merchant) || sameAddress(expected.owner, expected.merchant)) {
     return fail("signers_not_distinct");
   }
