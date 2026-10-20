@@ -8,7 +8,8 @@ import { getSessionUserId } from "../../auth/session";
 import { getReadRepos } from "./repos";
 import type { ViewDeps } from "./views";
 
-export const fixturesEnabled = () => process.env.REINS_FIXTURES === "1";
+/** Fixture mode is never available on a Vercel production deployment, whatever the env says. */
+export const fixturesEnabled = () => process.env.REINS_FIXTURES === "1" && process.env.VERCEL_ENV !== "production";
 
 export const jsonError = (status: number, error: string, code?: string) =>
   Response.json({ error, ...(code ? { code } : {}) } satisfies ApiError, { status });

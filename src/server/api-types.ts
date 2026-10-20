@@ -2,7 +2,9 @@
 // fixtures in fixtures/api/. Each section names its route owner. Amounts are integers in the
 // user's base currency (yuan for Lin) unless a field says otherwise.
 
+import type { Policy } from "@/src/core/mandate/schema";
 import type { Origin } from "@/src/core/types";
+import type { Policy as DraftPolicy } from "@/src/server/mandate/schema";
 
 export type Money = { amount: number; currency: string };
 /** A foreign amount with its base-currency equivalent and rate date (PRD FR18.4). */
@@ -181,3 +183,113 @@ export type AuditExportEntry = {
 };
 
 export type ApiError = { error: string; code?: string };
+
+// ---- R2: shared UI status ------------------------------------------------------------------
+
+/** Plain-language outcome shown on feed and evidence rows (docs/ui-direction.md §5). */
+export type UiStatus = "done" | "ask" | "suggest" | "blocked";
+
+// ---- R2: GET /api/feed, GET /api/feed/:id/why -----------------------------------------------
+
+/** One step of the Gate's recorded rule check, in plain words. Built from the stored trace. */
+export type FeedCheck = { label: string; passed: boolean };
+
+/**
+ * One thing Reins did or tried (an `actions` row that reached a decision). Every sentence is a
+ * template filled from stored ids and registry names; no model text (G6). `id` is the action id.
+ */
+export type FeedItem = {
+  id: string;
+  at: string;
+  status: UiStatus;
+  title: string;
+  detail: string;
+  amount?: Money;
+  ruleIds: string[];
+  mandateVersion: number;
+  origins: { origin: Origin; label: string; simulated?: boolean }[];
+  /** The "Rule check" steps, in the order the Gate ran them. */
+  checks: FeedCheck[];
+  tx?: { hash: string; explorerUrl: string };
+};
+/** Newest first. A bare array, like the Activity screen's stand-in. */
+export type FeedResponse = FeedItem[];
+
+export type FeedWhyResponse = {
+  id: string;
+  status: UiStatus;
+  decision: "allow" | "require_confirm" | "deny" | null;
+  mandateVersion: number;
+  /** Hash of the mandate the decision used (from the stored Gate result); null if none was stored. */
+  mandateHash: string | null;
+  ruleIds: string[];
+  checks: FeedCheck[];
+};
+
+// ---- R2: GET /api/mandates/active, GET /api/mandates/history --------------------------------
+
+/** The signed mandate in force: the Mandate Card's data. `policy` has every default applied. */
+export type MandateActiveResponse = {
+  version: number;
+  /** sha256 of the canonical stored policy, 64 lowercase hex. */
+  hash: string;
+  signedAt: string;
+  createdVia: "nl" | "template" | "edit";
+  policy: Policy;
+};
+
+export type MandateVersion = {
+  version: number;
+  signedAt: string;
+  /** One plain sentence built from the difference between this and the previous policy. */
+  change: string;
+  /**
+   * Less or more permission than the previous version. null = not classified yet: the live route
+   * returns null until compareMandates (src/core/mandate/narrow.ts) is wired in.
+   */
+  direction: "less" | "more" | "first" | null;
+  status: "active" | "superseded" | "revoked";
+};
+/** Newest first, like the Rules screen's stand-in. */
+export type MandateHistoryResponse = MandateVersion[];
+
+// ---- R2: POST /api/mandates/compile ----------------------------------------------------------
+
+export type MandateCompileRequest = { text: string };
+/**
+ * A draft only: nothing is saved, signed or activated by this route. `readback` is generated from
+ * `policy` by templates (never model text); `defaulted` lists fields the user did not mention,
+ * which took their most restrictive value. The policy has no `version`: activation assigns it.
+ * TODO(R2): add the diff against the active mandate and its less/more class (compareMandates).
+ */
+export type MandateCompileResponse = {
+  baseCurrency: "CNY" | "IDR";
+  policy: DraftPolicy;
+  defaulted: string[];
+  readback: string[];
+};
+
+// ---- R2: GET /api/audit/verify ------------------------------------------------------------
+
+/** One audit entry as the Evidence screen shows it. `event` is a template sentence, never model text. */
+export type AuditVerifyRow = {
+  seq: number;
+  at: string;
+  event: string;
+  /** The gate and the agent both show as "agent" (Reins); the raw actor is in /api/audit/export. */
+  actor: "agent" | "user" | "system";
+  status: UiStatus | null; // null = not a decision (e.g. rules signed)
+  ruleIds: string[];
+  /** Entry hash, 64 lowercase hex (no 0x). */
+  hash: string;
+  tx?: { hash: string; explorerUrl: string };
+};
+export type AuditVerifyResponse = {
+  chainOk: boolean;
+  checkedAt: string;
+  /** Entries in the whole chain (rows[] is only the newest page). */
+  count: number;
+  firstBreakSeq: number | null;
+  /** Newest first. */
+  rows: AuditVerifyRow[];
+};

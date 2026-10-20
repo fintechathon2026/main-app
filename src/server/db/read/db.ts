@@ -52,6 +52,16 @@ export function parseRows<S extends z.ZodType>(schema: S, rows: unknown[], what:
 
 export const EXPLORER_TX_BASE = "https://sepolia.basescan.org/tx/";
 
+const TX_HASH = /^0x[0-9a-fA-F]{64}$/;
+
+/**
+ * Explorer link for a value taken from stored JSON (result_json, event_json). Only a well-formed
+ * 32-byte hash gets a link; anything else (mock ids, malformed or hostile strings) gets none.
+ */
+export function txLink(value: unknown): { hash: string; explorerUrl: string } | null {
+  return typeof value === "string" && TX_HASH.test(value) ? { hash: value, explorerUrl: `${EXPLORER_TX_BASE}${value}` } : null;
+}
+
 /** On-chain hash → explorer link; `mock:` ids (mock escrow, architecture §24.13) are simulated. */
 export function chainTxRef(hash: string): { hash: string; explorerUrl: string; simulated: boolean } {
   if (hash.startsWith("mock:")) return { hash, explorerUrl: "", simulated: true };

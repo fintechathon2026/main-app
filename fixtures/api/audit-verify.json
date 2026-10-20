@@ -1,0 +1,101 @@
+{
+  "chainOk": true,
+  "checkedAt": "2026-10-19T03:00:00.000Z",
+  "count": 9,
+  "firstBreakSeq": null,
+  "rows": [
+    {
+      "seq": 9,
+      "at": "2026-10-19T02:40:00.000Z",
+      "event": "You resumed Reins",
+      "actor": "user",
+      "status": null,
+      "ruleIds": [],
+      "hash": "5a05d8b1bfdc2aa381db545db1581c24eeb8b3a08cae4c2e1e1f74c31cf1d1ec"
+    },
+    {
+      "seq": 8,
+      "at": "2026-10-19T01:12:01.000Z",
+      "event": "Asked for your OK",
+      "actor": "system",
+      "status": "ask",
+      "ruleIds": [],
+      "hash": "3e381a1ef86018f83e08878fa9d0e3f01ac70a6255170feb9816607864dcf1ca"
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-19T01:12:00.000Z",
+      "event": "Decided: pay bill needs your OK",
+      "actor": "agent",
+      "status": "ask",
+      "ruleIds": [
+        "payees.allow",
+        "bills.over_auto_pay_max"
+      ],
+      "hash": "c27e9e18db2d822d6727a23ee2a63aa33b6c441463643eedfddb9f563e1509b6"
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-18T09:05:00.000Z",
+      "event": "Decided: pay bill blocked",
+      "actor": "agent",
+      "status": "blocked",
+      "ruleIds": [
+        "payees.not_allowed"
+      ],
+      "hash": "0f5fcb75919a187554c949eddee1fe584f90ad1e7765da4f659d8ebd003a08d5"
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-18T08:30:02.000Z",
+      "event": "Done: pay bill",
+      "actor": "system",
+      "status": "done",
+      "ruleIds": [],
+      "hash": "30cd7ec3d571b7b7c3982c57552631043c66947b9fbd851a6ad23b3866704380"
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-18T08:30:00.000Z",
+      "event": "Decided: pay bill allowed",
+      "actor": "agent",
+      "status": "done",
+      "ruleIds": [
+        "payees.allow",
+        "bills.auto_pay_max"
+      ],
+      "hash": "11a1067bd0387056134b436a55d796e0e71132f1dc6a81f0e0ba8cea20f2a0d3"
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-16T03:00:00.000Z",
+      "event": "Reins prepared an action",
+      "actor": "system",
+      "status": null,
+      "ruleIds": [],
+      "hash": "863b951f7a414d258f63d9ffbfd829492486a0667f8985f2433973f52935d130"
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-10T11:30:00.000Z",
+      "event": "Done: use a prepaid session",
+      "actor": "system",
+      "status": "done",
+      "ruleIds": [],
+      "hash": "b7cb28058413032e0e95b75249d606c1d229851dacd110f7dc247ef846bbde61",
+      "tx": {
+        "hash": "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070",
+        "explorerUrl": "https://sepolia.basescan.org/tx/0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070"
+      }
+    },
+    {
+      "seq": 1,
+      "at": "2026-10-01T09:15:00.000Z",
+      "event": "Rules signed (version 1)",
+      "actor": "user",
+      "status": null,
+      "ruleIds": [],
+      "hash": "e104b85216cd619d7d792adc9cf62ffd908f7ab1eb6c383add3d5421701b74ed"
+    }
+  ]
+}
