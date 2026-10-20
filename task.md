@@ -27,7 +27,7 @@
 
 | ID | When | Pass condition | If it fails |
 |---|---|---|---|
-| **G1** Testnet spike | Sat Oct 17, 18:00 | Three confirmed Base Sepolia hashes (purchase, redeem, attested exit) in `docs/evidence/spike.md` | `REINS_ESCROW=mock`; build `MockEscrowAdapter` (§24.13); deck drops on-chain claims |
+| **G1** Testnet spike (**passed Oct 20**, `docs/evidence/spike.md`) | Sat Oct 17, 18:00 | Three confirmed Base Sepolia hashes (purchase, redeem, attested exit) in `docs/evidence/spike.md` | `REINS_ESCROW=mock`; build `MockEscrowAdapter` (§24.13); deck drops on-chain claims |
 | **M1** First bill end to end | Sun Oct 18, 12:00 | Bill → plan → approval → payment on the mock bank; attack PDF blocked | Tech lead cuts per `roles.md` §5 cut order |
 | **M2** Prepaid end to end | Sun Oct 18, 21:00 | Buy → check in → publish attestation → attested exit, three hashes in the feed (or mock ids after G1 fail) | Cut voluntary exit and soft signals first |
 | **M3** Pitch dry run | Mon Oct 19, 19:00 | 10-minute run with the live demo path | Fix list owned by R5 |
@@ -75,9 +75,9 @@
 
 ## 4. R3 Platform, Data and Chain
 
-- [ ] **R3-01** Generate relayer, agent, merchant, oracle and deployer keys; fund relayer, agent and deployer on Base Sepolia with margin; note faucet limits (§24.2, §24.12). Due Fri 23:59
+- [x] **R3-01** Generate relayer, agent, merchant, oracle and deployer keys; fund relayer, agent and deployer on Base Sepolia with margin; note faucet limits (§24.2, §24.12). Due Fri 23:59 *[Base Sepolia, Oct 20: deployer, relayer, agent, merchant sim, oracle and spike consumer keys generated (kept in `.env.local` only); deployer, relayer and agent funded from the Coinbase CDP faucet]*
 - [ ] **R3-02** `contracts/`: `TestCNY`, `PrepaidEscrow` (§24.3, §24.4); Foundry unit tests for every `require`. Due Sat 13:00
-- [ ] **R3-03** Deploy script + `deployments/base-sepolia.json`; spike script → three hashes in `docs/evidence/spike.md` (**G1**). Due Sat 18:00
+- [x] **R3-03** Deploy script + `deployments/base-sepolia.json`; spike script → three hashes in `docs/evidence/spike.md` (**G1**). Due Sat 18:00 *[Base Sepolia, Oct 20: deployed at block 48356082, `contracts/deployments/84532.json` (escrow `0xcf9e…37d0`, tCNY `0x7218…87F1`). Spike passed: purchase, redeem and attested exit confirmed, hashes and checks in `docs/evidence/spike.md`. Contract not verified on Basescan yet]*
 - [ ] **R3-04** Migrations, roles, RLS for the core tables (§12) plus prepaid tables (§24.8) and the `actions.actor` column; seed loader with Lin's data. Due Sat 12:00 if not done *[R1 note: Done by R1 (minimal): migrations 001–011, RLS, append-only audit log, seed for Lin in `supabase/`. R3 to review; add new migrations, don't edit applied ones]*
 - [ ] **R3-05** Mock bank: accounts, bills, billers, payments with idempotency, subscriptions with trials, cancel, scenarios, attack injection; mock bank adapter (§3, PRD §14.1). Due Sat *[R1 note: Done by R1 (minimal): `src/mockbank/`, `app/mockbank/`, settlement adapter. Internal transfer and reverse routes not built]*
 - [ ] **R3-06** Checkpointer `setup()` + Supabase pooler test; Vercel deploy on Node 22 (§19). Due Sat *[R1 note: Partly by R1: `pnpm db:checkpointer` script with grants. Pooler test and Vercel deploy not done]*
