@@ -222,11 +222,11 @@ describe("purchaseSignatureFacts", () => {
     expect(f).toMatchObject({ merchantSigValid: true, expired: true, termsMatchStored: true, consumerSigValid: true, merchantReason: "offer_expired" });
   });
 
-  it("reports tampered terms: stored mismatch, signatures still recover", async () => {
+  it("reports tampered terms: stored mismatch, merchant signature over other terms does not count", async () => {
     const t = { ...stored, unitPrice: 1 };
     const tAuth = { ...auth, offerHash: offerHash(domain, t) };
     const f = await purchaseSignatureFacts(domain, { offer: t, merchantSig: await signOffer(t), auth: tAuth, consumerSig: await signAuth(tAuth) }, expected);
-    expect(f).toMatchObject({ termsMatchStored: false, merchantSigValid: true, merchantReason: "terms_mismatch" });
+    expect(f).toMatchObject({ termsMatchStored: false, merchantSigValid: false, merchantReason: "terms_mismatch" });
   });
 
   it("reports a forged merchant signature and a forged consumer signature", async () => {

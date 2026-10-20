@@ -189,10 +189,11 @@ export type PurchaseExpectation = {
 };
 
 /**
- * Runs both checks and maps them to the Gate's booleans. `merchantSigValid` is true when the offer as
- * supplied was signed by the expected merchant, whatever its terms or expiry; those are separate facts. The consumer's PurchaseAuth is checked
- * against the digest of the offer as supplied, so it must bind exactly that offer; whether that
- * offer equals the stored one is reported separately by `termsMatchStored`.
+ * Runs both checks and maps them to the Gate's booleans. `merchantSigValid` is true only when the
+ * offer as supplied was signed by the expected merchant AND its terms equal the stored offer, so a
+ * merchant signature over other terms never counts (expiry is the separate `expired` fact;
+ * `termsMatchStored` is also reported on its own). The consumer's PurchaseAuth is checked against
+ * the digest of the offer as supplied, so it must bind exactly that offer.
  */
 export async function purchaseSignatureFacts(
   domain: TypedDataDomain,
@@ -205,7 +206,8 @@ export async function purchaseSignatureFacts(
     nowSeconds: expected.nowSeconds,
   });
 
-  // The signature fact is only "this offer was signed by the merchant"; terms and expiry have their own facts.
+  // "Valid" = signed by the merchant over terms equal to the stored offer; expiry has its own fact.
+  const termsMatchStored = offerTermsEqual(input.offer, expected.storedOffer);
   const merchantSignedBy = sameAddress(await recoverOfferSigner(domain, input.offer, input.merchantSig), expected.merchant);
 
   let digest: string | null = null;
@@ -224,9 +226,9 @@ export async function purchaseSignatureFacts(
     : ({ ok: false, reason: "malformed_message" } as const);
 
   return {
-    merchantSigValid: merchantSignedBy,
+    merchantSigValid: merchantSignedBy && termsMatchStored,
     expired: !(input.offer.expiresAt > expected.nowSeconds),
-    termsMatchStored: offerTermsEqual(input.offer, expected.storedOffer),
+    termsMatchStored,
     consumerSigValid: consumer.ok,
     merchantReason: merchant.ok ? null : merchant.reason,
     consumerReason: consumer.ok ? null : consumer.reason,
