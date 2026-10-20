@@ -107,6 +107,59 @@ Test suite: `contracts/test/PrepaidEscrow.t.sol` (596 lines), `contracts/test/In
 - **C8. A redeem deadline has no upper bound in the contract** (`:163`). A leaked pair of signatures for the next session stays usable until its deadline or until the plan ends. The browser and the gym tablet choose the deadline, not the contract.
 - **C9. `TestCNY` has an owner who can mint without limit** (`TestCNY.sol:19-21`). The escrow never calls it (`TestCNY.sol:11`). It is a demo faucet for a valueless token. A real deployment would need a different token and a fresh review.
 
+### 3.2 The chain adapter and key handling
+
+**Where the code is.** The chain adapter is one file, `src/server/adapters/settlement/chain/escrow.ts` (332 lines). It is built only when `REINS_ESCROW=chain` (`src/server/executor/run.ts:82-92`). Anything else uses the mock escrow. If the chain is selected but not configured, the first prepaid action fails with `escrow_not_configured` instead of falling back to the mock (`escrow.ts:322-325`). Helpers live in `src/server/chain/` (`client.ts`, `types.ts`, `eip712.ts`, `abi.ts`, `indexer.ts`).
+
+**Which keys the server reads.**
+
+| Key | Read at | Used for |
+|---|---|---|
+| `RELAYER_PRIVATE_KEY` | `escrow.ts:327` | Gas for `purchaseWithPermit`, `redeem`, `exitVoluntaryBySig` (`SENDER_OF`, `:37-42`) |
+| `AGENT_PRIVATE_KEY` | `escrow.ts:328` | `exitWithAttestation` only (`:41`) |
+| `AGENT_ADDRESS` (not a key) | `escrow.ts:329` | Must equal the agent key's address, or the adapter refuses to start (`:108-111`). `tests/chain/adapter.test.ts:148` covers this |
+
+The consumer key is never read by the server. The simulator keys (`MERCHANT_SIM_PRIVATE_KEY`, `ORACLE_PRIVATE_KEY`) are read only under `src/sim/` (`src/sim/merchant/keys.ts:16`, `src/sim/registry/attestations.ts:58`). `TOKEN_MINTER_PRIVATE_KEY` is read by no file under `src/` or `app/`, only by `scripts/chain-demo-setup-main.ts:36`.
+
+**The lint rule** (`eslint.config.mjs:11-31`, `:85-102`). `RELAYER_PRIVATE_KEY` and `AGENT_PRIVATE_KEY` may be read only under `src/server/adapters/settlement/chain/**`. The simulator keys may be read only under `src/sim/**`. The chain adapter may not read simulator keys, and `src/sim/**` may not read chain keys. The selectors catch `a.KEY`, `a["KEY"]` and `const { KEY } = a`. We read the config; we did not run `pnpm lint` for this update. The rule has limits you should know about:
+
+- Tests, `scripts/**` and `*.test.*` files are exempt (`eslint.config.mjs:17`). `scripts/chain-demo-setup-main.ts:34-36` reads `DEMO_CONSUMER_PRIVATE_KEY`, `RELAYER_PRIVATE_KEY` and `TOKEN_MINTER_PRIVATE_KEY`. It is a local demo script, not request code.
+- A read through a variable name, such as `process.env[name]`, is not matched. Review has to catch that.
+- It is a build check. Someone who edits the config removes it. CODEOWNERS covers that (`roles.md` §6.1).
+- The relayer, agent, oracle and merchant simulator keys are all read by code in the same Next.js app. If they are set in one deployment, one server compromise yields all of them. Only the consumer key is outside the server. The simulators are meant to be outside parties; here they are not separate processes.
+
+**Nonce allocation and stored raw transactions** (`escrow.ts:157-236`, `supabase/migrations/20261020000012_chain_nonces.sql`). Each send follows this order:
+
+1. If a `chain_txs` row exists for the action, re-broadcast its stored `raw_tx`, same hash (`:163-178`). `chain_txs.action_id` is `unique` (`supabase/migrations/20261017000004_prepaid_tables.sql:93`), so an action has at most one transaction.
+2. Simulate with `estimateContractGas`. A contract revert returns `reverted` and nothing is signed or sent (`:181-189`). An RPC failure throws `chain_rpc_unavailable` (`:189`, `:191-193`).
+3. In one database transaction: lock the sender's `chain_nonces` row with `for update` (`:201`), take `max(next_nonce, pending count)` (`:202-203`), sign, insert the `chain_txs` row with `raw_tx` and `tx_hash`, and advance `next_nonce` (`:198-222`). A failure rolls all of it back, so there is no nonce gap from a failed signing.
+4. Broadcast. A failure leaves the signed row and returns `pending` (`:225-229`). A receipt timeout also returns `pending` (`:126-134`). The executor maps `pending` to `unknown`, not to a second send (`run.ts:295`, `:342`).
+
+What is stored: the raw signed transaction (public once broadcast) and its hash. No private key is stored. `chain_txs` is user-scoped under RLS (`supabase/migrations/20261017000005_rls.sql:13`). `chain_nonces` is a system table, `reins_server` only, with forced RLS (`20261020000012_chain_nonces.sql:13-17`). Tested by `tests/chain/adapter.test.ts:108` (same hash on re-run) and `:123` (parallel sends get consecutive nonces). Both need anvil, `contracts/out` and a database.
+
+Limits of this design:
+
+- If a signed transaction is never broadcast, later transactions from that sender take higher nonces and wait behind it. A re-run of the same action re-broadcasts it (`:167-178`), but no job does that alone. `reconcile` is not built (KR-10).
+- Gas price comes from the RPC with no cap (`:191`, `:210-212`), and gas is the estimate plus 20% (`:210`). Test ETH only.
+- Chain deploy is not done, so none of this has run against a public network (KR-17).
+
+**User-signed flows.** Purchase, check-in and voluntary exit start in the browser and run through the same executor and Gate as agent actions (`src/server/prepaid/user-actions.ts:1-7`).
+
+- The signed payload is stored next to the action, not in its args, in `prepaid_action_signatures` (`user-actions.ts:92`). The agent cannot supply or change it. The `prepaid_exit` owner signature is stored in `prepaid_exit_signatures` for the same reason (`exit-signature.ts:1-8`).
+- Phase B of `src/server/executor/run.ts` re-verifies before anything is reserved: `snapshot.ts:297-331` builds `consumerSigValid` and `merchantSigValid` from the stored payload against the plan owner and merchant read from the escrow. The Gate decides on those facts.
+- An approved `prepaid_exit` whose stored owner signature no longer verifies is denied by the executor before any cap is reserved or the approval consumed (`run.ts:178-207`, rule name at `:36`). The settle step sends exactly the signature phase B verified (`run.ts:287-293`).
+- Storing the exit signature is session-scoped and checks that the signer is the user's own `consumer_browser` wallet and that the deadline is in the future by the database clock (`exit-signature.ts:70-108`). The audit event holds the action id and deadline, not the signature (`:115`).
+- High-s signatures are rejected before recovery for purchase and redeem (`purchase-signature.ts:51-56`, `:64`, `:80`; `redeem-signature.ts:62`), with tests (`purchase-signature.test.ts:189`, `redeem-signature.test.ts:160`). **They are not rejected for the voluntary exit** (note C5).
+- "Never throws" holds for the signature recovery helpers. `purchaseSignatureFacts` returns failing facts on any bad input (`purchase-signature.ts:267-281`), `verifyRedeemSignatures` catches and fails (`redeem-signature.ts:90-100`), and `recoverVoluntaryExitSigner` returns `null` (`exit-signature.ts:35-47`). `verifiedVoluntaryExitSignature` (`:55-67`) runs a database query and can throw on a database error. That aborts the phase B transaction, which fails closed.
+- Every user-signed action also needs the Gate to return `allow`. The rows in §2 apply. With `REINS_ESCROW=mock` the same checks run, but the mock bank, not a contract, moves the money.
+
+**The browser consumer key** (`src/ui/prepaid/consumer-key.ts`).
+
+- It is generated in the browser (`:57`) and stored in IndexedDB database `reins-keys` (`:11-13`, `:43-45`). It is stored as a plain hex string. The backup file is encrypted (PBKDF2-SHA256, 310,000 rounds, AES-GCM, `:72-95`). The stored key is not. Script injection on our own origin could read it. We have not assessed a Content-Security-Policy.
+- We checked that it is never sent to the server. The only `fetch` in the file sends the address to `POST /api/prepaid/wallet` (`:61-66`). Every other request in `src/ui` and `app` is a GET, a body-less POST, or sends signatures and ids: `src/ui/prepaid/actions.tsx:79` (offer, signatures, optional permit), `:147` (check-in signatures), `:170` (exit signature), `src/ui/screens/approval.tsx:47` (exit signature). The signing code is `src/ui/prepaid/sign.ts`, which receives an account object and returns signatures. No file under `src/server`, `src/agent`, `src/core` or `app/api` imports `src/ui` code (a search found one comment in `app/api/kill-switch/route.ts:4`). This is a read of the code, not a network capture.
+- The server also sees the token permit signature, which lets the escrow pull the exact purchase total (`sign.ts:64-80`). It is a signature, not a key.
+- Losing the key means the owner cannot sign a voluntary exit or a check-in. Attested exits still work (T27, KR-7).
+
 ## 4. Threats and residual risk
 
 Ratings in the "PRD rating" column are copied from PRD §16.1. The PRD says these are filled from red-team results. The last column is our own current view. It is not a measurement. Where it says "pending", it waits on the red-team run in §6.
