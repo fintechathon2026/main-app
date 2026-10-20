@@ -4,7 +4,7 @@
 // only shows "paused" after the server confirms; it never pretends to have stopped anything.
 
 import { Pause, Play } from "@phosphor-icons/react/dist/ssr";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Button } from "../components/primitives";
 import { Modal } from "../components/overlay";
 import { postJson } from "../data";
@@ -23,6 +23,18 @@ export function PauseProvider({ children }: { children: ReactNode }) {
   const [confirming, setConfirming] = useState<"pause" | "resume" | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  // Start from what the server says, so a reload while paused still shows "paused".
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/kill-switch", { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<{ enabled: boolean }>) : null))
+      .then((d) => alive && d && setPaused(d.enabled))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const close = useCallback(() => {
     setConfirming(null);

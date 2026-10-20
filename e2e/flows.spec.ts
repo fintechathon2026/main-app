@@ -95,3 +95,25 @@ test.describe("sign in", () => {
     await expect(page).toHaveURL("/");
   });
 });
+
+test.describe("pause everything", () => {
+  test("a reload while paused still says paused, and resuming asks the server", async ({ page }) => {
+    let enabled = true;
+    const posts: unknown[] = [];
+    await page.route("**/api/kill-switch", async (route) => {
+      if (route.request().method() === "POST") {
+        const body = route.request().postDataJSON() as { enabled: boolean };
+        posts.push(body);
+        enabled = body.enabled;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ enabled, changedAt: null }) });
+    });
+    await page.goto("/");
+    await expect(page.getByText("Everything is paused. No payments or cancellations will run.")).toBeVisible();
+
+    await page.getByRole("button", { name: "Resume", exact: true }).first().click();
+    await page.getByRole("dialog").getByRole("button", { name: "Resume", exact: true }).click();
+    await expect(page.getByText("Everything is paused.")).toBeHidden();
+    expect(posts).toEqual([{ enabled: false }]);
+  });
+});
