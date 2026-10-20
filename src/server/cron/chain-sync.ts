@@ -9,7 +9,7 @@ import { chainConfigFromEnv, publicClientFor } from "../chain/client";
 import { runChainSync, type ChainSyncStats as IndexerStats } from "../chain/indexer";
 import { getPool } from "../db/pool";
 import { recordJobRun } from "../db/read/detect-store";
-import { cronUserIds } from "./jobs";
+import { cronUserIds } from "./users";
 
 export class ChainSyncNotImplementedError extends Error {
   readonly code = "chain_not_configured";
