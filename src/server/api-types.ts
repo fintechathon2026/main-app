@@ -181,3 +181,33 @@ export type AuditExportEntry = {
 };
 
 export type ApiError = { error: string; code?: string };
+
+// ---- R2: shared UI status ------------------------------------------------------------------
+
+/** Plain-language outcome shown on feed and evidence rows (docs/ui-direction.md §5). */
+export type UiStatus = "done" | "ask" | "suggest" | "blocked";
+
+// ---- R2: GET /api/audit/verify ------------------------------------------------------------
+
+/** One audit entry as the Evidence screen shows it. `event` is a template sentence, never model text. */
+export type AuditVerifyRow = {
+  seq: number;
+  at: string;
+  event: string;
+  /** The gate and the agent both show as "agent" (Reins); the raw actor is in /api/audit/export. */
+  actor: "agent" | "user" | "system";
+  status: UiStatus | null; // null = not a decision (e.g. rules signed)
+  ruleIds: string[];
+  /** Entry hash, 64 lowercase hex (no 0x). */
+  hash: string;
+  tx?: { hash: string; explorerUrl: string };
+};
+export type AuditVerifyResponse = {
+  chainOk: boolean;
+  checkedAt: string;
+  /** Entries in the whole chain (rows[] is only the newest page). */
+  count: number;
+  firstBreakSeq: number | null;
+  /** Newest first. */
+  rows: AuditVerifyRow[];
+};
