@@ -1746,7 +1746,7 @@ interface PrepaidFacts {
 | `prepaid.max_prepay` | purchase | `totalBase ≤ max_prepay` | deny |
 | `prepaid.redeem` | `prepaid_redeem`, actor user | plan active; owner is the user's wallet; `sessionNo == nextSession`; both signatures valid | deny |
 | `global.daily_outflow_cap` | redeem | one unit price fits the remaining cap | deny |
-| `prepaid.auto_exit_on` | `prepaid_exit`, actor agent | plan active; owner is the user's wallet; `agentIsOurs`; attestation signer is the oracle, merchant matches, not expired, `ageDays ≤ attestation_max_age_days`, kind listed in the mandate | require_confirm (the approval sheet collects a voluntary-exit signature) |
+| `prepaid.auto_exit_on` | `prepaid_exit`, actor agent | plan active; owner is the user's wallet; `agentIsOurs`; attestation signer is the oracle, merchant matches, not expired, `ageDays ≤ attestation_max_age_days`, kind listed in the mandate | deny with `prepaid.exit_use_voluntary_flow` when the consumer signature is missing; `require_confirm` (`prepaid.exit_needs_confirm`) only when `consumerSigValid` is true. An approval alone never moves escrowed money, so the user is pointed to the voluntary-exit flow |
 | `prepaid.exit_voluntary` | `prepaid_exit_voluntary`, actor user | plan active; owner is the user's wallet; consumer signature valid | deny |
 | `global.kill_switch` | all prepaid actions | kill switch off | deny |
 
@@ -1817,7 +1817,7 @@ sequenceDiagram
   EX->>EX: audit + feed "Returned ¥4,800 from FitBox ... tx 0x..."
 ```
 
-If any check fails, the Gate returns `require_confirm`, and Lin sees a card offering a voluntary exit (fee shown) or keeping the plan.
+If any attestation check fails, the Gate denies the agent exit (`prepaid.exit_use_voluntary_flow`) unless a valid consumer signature is already present, and Lin sees a card offering a voluntary exit (fee shown) or keeping the plan.
 
 ### 24.11 Tests
 
