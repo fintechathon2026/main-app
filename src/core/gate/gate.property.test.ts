@@ -7,7 +7,7 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { canonical, hashPolicy } from "../mandate/canonical";
-import { narrows } from "../mandate/narrow";
+import { compareMandates, equivalent, narrows } from "../mandate/narrow";
 import { parsePolicy, type Policy } from "../mandate/schema";
 import type { Decision, GateSnapshot, Origin, PrepaidFacts, TypedAction } from "../types";
 import { decide } from "./decide";
@@ -117,7 +117,13 @@ function narrowingOf(p: Policy): fc.Arbitrary<Policy> {
       newPayee: upTo(CONFIRM_ORDER, p.payees.new_payee),
       autoPay: atMost(p.bills.auto_pay_max),
       k: atMost(a.k),
-      alpha: a.alpha === undefined ? fc.constant(undefined) : fc.constantFrom(...ALPHAS.filter((x) => x >= a.alpha!), undefined),
+      // Under conformal two defined alphas are incomparable (FINDING 1): keep it or drop it.
+      alpha:
+        a.alpha === undefined
+          ? fc.constant(undefined)
+          : a.method === "conformal"
+            ? fc.constantFrom<number | undefined>(a.alpha, undefined)
+            : fc.constantFrom(...ALPHAS.filter((x) => x >= a.alpha!), undefined),
       minHistory: atLeast(a.min_history, 3),
       cancel: upTo(CONFIRM_ORDER, p.subscriptions.cancel),
       subscribe: upTo(CONFIRM_ORDER, p.subscriptions.subscribe),
@@ -359,6 +365,100 @@ const scenarioFor = (only?: ToolKey): fc.Arbitrary<Scenario> =>
   );
 const scenarioArb = scenarioFor();
 
+type Json = Record<string, unknown>;
+const isObject = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Take each leaf from `other` when `pick()` says so, else from `base`. Arrays and the per-payee map are leaves. */
+function mix(base: Json, other: Json, pick: (path: string) => boolean, prefix = ""): Json {
+  const out: Json = {};
+  for (const key of [...new Set([...Object.keys(base), ...Object.keys(other)])].sort()) {
+    const a = base[key];
+    const b = other[key];
+    const path = prefix + key;
+    const value =
+      isObject(a) && isObject(b) && key !== "per_payee_daily_cap"
+        ? mix(a, b, pick, path + ".")
+        : pick(path)
+          ? b
+          : a;
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
+const keepBit = fc.constantFrom(...Array(6).fill(false), true);
+
+/**
+ * Anomaly-only pairs in an otherwise wide-open setting (trusted bill, allowed payee, huge caps),
+ * so the anomaly verdict is the only thing that can change the outcome and every accepted pair
+ * is a real test of the k / alpha / min_history / method order.
+ */
+const anomalyScenario: fc.Arbitrary<Scenario> = fc.integer({ min: 20, max: 500 }).chain((base) =>
+  fc
+    .tuple(
+      policyFor(base),
+      rawPolicy(base),
+      fc.array(fc.boolean(), { minLength: 24, maxLength: 24 }),
+      fc.array(fc.integer({ min: -6, max: 6 }).map((d) => Math.max(0, base + d)), { maxLength: 8 }),
+      near(base, 15),
+    )
+    .map(([policy, fresh, bits, amounts, amount]) => {
+      const open = (v: unknown): Json => {
+        const r = clean(v) as Json & { bills: Json };
+        return {
+          ...r,
+          payees: { allow: [...BILLERS], new_payee: "deny" },
+          bills: { ...r.bills, auto_pay_max: 1_000_000 },
+          global: { daily_outflow_cap: 1_000_000 },
+        };
+      };
+      let i = 0;
+      const pick = (path: string) => bits[i++ % bits.length] && path.startsWith("bills.anomaly.");
+      const p = parse(open(policy));
+      const q = parse(mix(open(policy), open(fresh), pick));
+      const snap: Omit<GateSnapshot, "mandate"> = {
+        now: NOW,
+        killSwitch: false,
+        provenance: { destinationOrigin: "registry", amountOrigin: "mock_bank", amountMatchesBill: true },
+        payee: { billerId: "A", inRegistry: true, verified: true },
+        history: { amounts },
+        fx: null,
+        caps: { dailyUsed: 0, dailyCap: 1_000_000 },
+        approval: null,
+      };
+      const action: TypedAction = { tool: "pay_bill", actor: "agent", args: { bill_id: "bill", biller_id: "A", amount } };
+      return { p, narrowed: q, snap, action };
+    }),
+);
+
+type Block = "fx" | "payees" | "bills" | "subscriptions" | "savings_sweep" | "budgets" | "prepaid" | "global";
+const blockBit = fc.constantFrom(false, false, true);
+
+/**
+ * p, and a q built by independently replacing leaves of p with fresh random values. With `block`
+ * only that block's leaves are replaced (about a third of them), which makes narrows() accept
+ * most pairs, so each block's order gets thousands of accepted pairs instead of a handful.
+ */
+const independentScenarioFor = (only?: ToolKey, block?: Block): fc.Arbitrary<Scenario> =>
+  fc.integer({ min: 20, max: 500 }).chain((base) =>
+    fc
+      .tuple(policyFor(base), rawPolicy(base), fc.array(block ? blockBit : keepBit, { minLength: 96, maxLength: 96 }))
+      .map(([p, fresh, bits]) => {
+        let i = 0;
+        const pick = (path: string) => {
+          const bit = bits[i++ % bits.length];
+          return block ? bit && path.split(".")[0] === block : bit;
+        };
+        const q = parse(clean(mix(clean(p) as Json, clean(fresh) as Json, pick)));
+        return { p, narrowed: q };
+      })
+      .chain(({ p, narrowed }) =>
+        actionFor(p, base, only).chain((action) =>
+          snapshotFor(p, action, base).map((snap) => ({ p, narrowed, action, snap: clean(snap) })),
+        ),
+      ),
+  );
+
 function under(s: Scenario, policy: Policy): Decision {
   const snap: GateSnapshot = {
     ...s.snap,
@@ -375,61 +475,103 @@ function monotone(s: Scenario): void {
   expect(RANK[after], `${s.action.tool}: ${before} -> ${after}`).toBeGreaterThanOrEqual(RANK[before]);
 }
 
-/**
- * FINDING 1 lives in a conformal mandate whose alpha moves to another defined value. Everything
- * else (including dropping alpha, and alpha under median_mad where it is unused) stays checked.
- */
-const alphaMovesUnderConformal = (s: Scenario) => {
-  const before = s.p.bills.anomaly;
-  const after = s.narrowed.bills.anomaly;
-  return before.method === "conformal" && after.alpha !== undefined && after.alpha !== before.alpha;
-};
+/** The theorem for any pair: if `narrowed` narrows `p` then the Gate is no more permissive. */
+function monotoneIfNarrows(s: Scenario): void {
+  if (!narrows(s.narrowed, s.p)) return;
+  const before = under(s, s.p);
+  const after = under(s, s.narrowed);
+  expect(RANK[after], `${s.action.tool}: ${before} -> ${after}`).toBeGreaterThanOrEqual(RANK[before]);
+}
 
 // ---- (a) narrowing monotonicity -------------------------------------------------------------
 
 describe("narrowing monotonicity: decide(p') is never more permissive than decide(p)", () => {
-  it("holds for every field except alpha under conformal (mixed tools, prepaid fields included)", () => {
-    fc.assert(
-      fc.property(scenarioArb, (s) => {
-        fc.pre(!alphaMovesUnderConformal(s));
-        monotone(s);
-      }),
-      { numRuns: 4000 },
-    );
+  it("holds for every field (mixed tools, prepaid fields included)", () => {
+    fc.assert(fc.property(scenarioArb, monotone), { numRuns: 4000 });
   });
 
   // The rules behind each tool need several facts to line up before they can say "allow", so each
   // tool also gets its own run with facts biased toward passing: otherwise a field that only
   // matters on the allow path is almost never exercised.
   it.each(TOOLS)("holds per tool: %s", (tool) => {
-    fc.assert(
-      fc.property(scenarioFor(tool), (s) => {
-        fc.pre(!alphaMovesUnderConformal(s));
-        monotone(s);
-      }),
-      { numRuns: tool === "pay_bill" ? 8000 : 3000 },
-    );
+    fc.assert(fc.property(scenarioFor(tool), monotone), { numRuns: tool === "pay_bill" ? 5000 : 2000 });
   });
 
-  // FINDING 1 (reported, not fixed): PRD §9.5 orders `alpha` as "p'.alpha >= p.alpha narrows", but
-  // conformalCheck (anomaly.ts) fails closed with `insufficient_history` whenever
-  // ceil((n+1)(1-alpha)) > n, i.e. alpha < 1/(n+1). A LARGER alpha can therefore be MORE permissive.
-  // Minimal case: method conformal, history [100,100,100], pay 100: alpha 0.2 -> rank 4 > n=3 ->
-  // require_confirm; alpha 0.3 -> rank 3 -> q=0, |x-m|=0 -> allow. This is the full property
-  // (alpha not pinned) and it must fail until the order or conformalCheck is fixed; `it.fails`
-  // keeps CI green and turns red the moment it is fixed, so the marker gets removed.
-  it.fails("FINDING 1: holds for alpha too (conformal boundary alpha < 1/(n+1))", () => {
-    const p = parse({
-      version: 5,
-      base_currency: "CNY",
-      payees: { allow: ["A"], new_payee: "deny" },
-      bills: { auto_pay_max: 300, anomaly: { method: "conformal", k: 3, alpha: 0.2, min_history: 3 } },
-      global: { daily_outflow_cap: 1000 },
-    });
-    const narrowed = parse({ ...p, bills: { ...p.bills, anomaly: { ...p.bills.anomaly, alpha: 0.3 } } });
+  // The tests above build p' by narrowing p, so they cannot notice a field that narrows() orders
+  // wrongly. Here p' is p with leaves independently replaced by fresh random values, and only the
+  // pairs that narrows() accepts must be monotone: a wrong order shows up as a counterexample.
+  it("holds for independently perturbed pairs accepted by narrows() (mixed tools)", () => {
+    fc.assert(fc.property(independentScenarioFor(), monotoneIfNarrows), { numRuns: 5000 });
+  });
+
+  it("holds for anomaly blocks perturbed independently in a wide-open mandate", () => {
+    fc.assert(fc.property(anomalyScenario, monotoneIfNarrows), { numRuns: 10_000 });
+  });
+
+  it("anomaly pairs are not vacuous: accepted pairs change the verdict in both methods", () => {
+    const seen = { median_mad: 0, conformal: 0, tightened: 0 };
+    for (const s of fc.sample(anomalyScenario, { numRuns: 6000, seed: 11 })) {
+      if (!narrows(s.narrowed, s.p) || equivalent(s.narrowed, s.p)) continue;
+      seen[s.p.bills.anomaly.method]++;
+      if (RANK[under(s, s.narrowed)] > RANK[under(s, s.p)]) seen.tightened++;
+    }
+    expect(seen.median_mad).toBeGreaterThan(100);
+    expect(seen.conformal).toBeGreaterThan(30);
+    expect(seen.tightened).toBeGreaterThan(30);
+  });
+
+  // Perturb one block at a time against the tools that read it.
+  const FOCUS: [Block, ToolKey | undefined, number][] = [
+    ["fx", "pay_bill", 2000],
+    ["payees", "pay_bill", 2000],
+    ["bills", "pay_bill", 4000],
+    ["subscriptions", "cancel_subscription", 1500],
+    ["savings_sweep", "sweep_to_savings", 750],
+    ["budgets", undefined, 750],
+    ["prepaid", "prepaid_purchase", 2000],
+    ["prepaid", "prepaid_exit", 2000],
+    ["prepaid", "prepaid_redeem", 750],
+    ["global", "pay_bill", 2000],
+    ["global", undefined, 1500],
+  ];
+  it.each(FOCUS)("holds for pairs differing only in block %s (tool %s)", (block, tool, numRuns) => {
+    fc.assert(fc.property(independentScenarioFor(tool, block), monotoneIfNarrows), { numRuns });
+  });
+
+  it("independent pairs are not vacuous: many are accepted by narrows(), and some of those tighten", () => {
+    let accepted = 0;
+    let changed = 0;
+    let tightened = 0;
+    for (const s of fc.sample(independentScenarioFor(), { numRuns: 6000, seed: 7 })) {
+      if (!narrows(s.narrowed, s.p)) continue;
+      accepted++;
+      if (!equivalent(s.narrowed, s.p)) changed++;
+      if (RANK[under(s, s.narrowed)] > RANK[under(s, s.p)]) tightened++;
+    }
+    expect(accepted).toBeGreaterThan(300);
+    expect(changed).toBeGreaterThan(100);
+    expect(tightened).toBeGreaterThan(10);
+  });
+
+  // FINDING 1 (kept as a regression): PRD §9.5 orders `alpha` as "larger narrows", but conformalCheck
+  // (anomaly.ts) fails closed with `insufficient_history` whenever ceil((n+1)(1-alpha)) > n, i.e.
+  // alpha < 1/(n+1), so a LARGER alpha can be MORE permissive. Method conformal, history
+  // [100,100,100], pay 100: alpha 0.2 -> require_confirm, alpha 0.3 -> allow. narrows() therefore
+  // calls two different defined alphas under conformal "incomparable" in both directions.
+  it("FINDING 1: a conformal alpha change is incomparable, and decide() shows why", () => {
+    const conformal = (alpha: number) =>
+      parse({
+        version: 5,
+        base_currency: "CNY",
+        payees: { allow: ["A"], new_payee: "deny" },
+        bills: { auto_pay_max: 300, anomaly: { method: "conformal", k: 3, alpha, min_history: 3 } },
+        global: { daily_outflow_cap: 1000 },
+      });
+    const p = conformal(0.2);
+    const larger = conformal(0.3);
     const witness: Scenario = {
       p,
-      narrowed,
+      narrowed: larger,
       action: { tool: "pay_bill", actor: "agent", args: { bill_id: "bill", biller_id: "A", amount: 100 } },
       snap: {
         now: NOW,
@@ -442,10 +584,16 @@ describe("narrowing monotonicity: decide(p') is never more permissive than decid
         approval: null,
       },
     };
-    fc.assert(
-      fc.property(scenarioArb, (s) => monotone(s)),
-      { numRuns: 4000, examples: [[witness]] },
-    );
+    expect(under(witness, p)).toBe("require_confirm");
+    expect(under(witness, larger)).toBe("allow"); // the larger alpha really is more permissive here
+    expect(compareMandates(p, larger)).toEqual({
+      relation: "incomparable",
+      changes: [{ path: "bills.anomaly.alpha", direction: "incomparable" }],
+    });
+    expect(compareMandates(larger, p).relation).toBe("incomparable");
+    expect(narrows(larger, p)).toBe(false);
+    expect(narrows(p, larger)).toBe(false);
+    monotoneIfNarrows(witness); // so the monotonicity property never applies to this pair
   });
 
   it("is not vacuous: every tool is sometimes allowed, and narrowing sometimes strictly tightens", () => {
