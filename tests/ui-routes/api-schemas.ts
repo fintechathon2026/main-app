@@ -60,7 +60,52 @@ export const MandateVersion = z.strictObject({
 });
 export const MandateHistoryResponse = z.array(MandateVersion);
 
-export const AuditVerifyRow =z.strictObject({
+const act = z.enum(["deny", "confirm"]);
+const nat = z.number().int().nonnegative();
+/** The compiler's complete draft policy (src/server/mandate/schema.ts `Policy`, no `version`). */
+export const DraftPolicy = z.strictObject({
+  base_currency: z.enum(["IDR", "CNY"]),
+  fx: z.strictObject({ rate_source: z.literal("ecb_reference"), margin_pct: z.number().nonnegative() }),
+  payees: z.strictObject({ allow: z.array(z.string().min(1)), new_payee: act }),
+  bills: z.strictObject({
+    auto_pay_max: nat,
+    anomaly: z.strictObject({ method: z.enum(["median_mad", "conformal"]), k: z.number().nonnegative(), alpha: z.number(), min_history: nat }),
+    pay_days_before_due: nat,
+  }),
+  subscriptions: z.strictObject({
+    cancel: act,
+    subscribe: act,
+    renewal_notice_days: nat,
+    renew_unseen_price_increase: z.enum(["confirm", "allow"]),
+    auto_cancel_trials: z.strictObject({ enabled: z.boolean(), days_before_charge: nat, notify_days_before: nat }),
+  }),
+  savings_sweep: z
+    .strictObject({ enabled: z.boolean(), on: z.string(), pct: z.number(), keep_buffer_for_bills: z.boolean(), undo_hours: nat })
+    .optional(),
+  budgets: z.strictObject({ move_between_categories: act }).optional(),
+  prepaid: z.strictObject({
+    purchase: act,
+    escrow_only: z.boolean(),
+    max_prepay: nat,
+    auto_exit_on: z.array(z.enum(["court_enforcement", "closure_notice"])),
+    attestation_max_age_days: nat,
+    warn_on_soft_signals: z.boolean(),
+  }),
+  global: z.strictObject({
+    daily_outflow_cap: nat,
+    per_payee_daily_cap: z.record(z.string(), nat).optional(),
+    expires_at: z.string().optional(),
+  }),
+});
+export const MandateCompileRequest = z.strictObject({ text: z.string().min(1).max(4000) });
+export const MandateCompileResponse = z.strictObject({
+  baseCurrency: z.enum(["CNY", "IDR"]),
+  policy: DraftPolicy,
+  defaulted: z.array(z.string().min(1)),
+  readback: z.array(z.string().min(1)).min(1),
+});
+
+export const AuditVerifyRow = z.strictObject({
   seq: z.number().int().positive(),
   at: iso,
   event: z.string().min(1),
@@ -90,6 +135,8 @@ export type Checks = [
   Assert<Equal<z.infer<typeof MandateActiveResponse>, T.MandateActiveResponse>>,
   Assert<Equal<z.infer<typeof MandateVersion>, T.MandateVersion>>,
   Assert<Equal<z.infer<typeof MandateHistoryResponse>, T.MandateHistoryResponse>>,
+  Assert<Equal<z.infer<typeof MandateCompileRequest>, T.MandateCompileRequest>>,
+  Assert<Equal<z.infer<typeof MandateCompileResponse>, T.MandateCompileResponse>>,
   Assert<Equal<z.infer<typeof AuditVerifyRow>, T.AuditVerifyRow>>,
   Assert<Equal<z.infer<typeof AuditVerifyResponse>, T.AuditVerifyResponse>>,
 ];

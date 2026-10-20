@@ -8,7 +8,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import type { ModelClients } from "@/src/agent/deps";
 import { GENESIS_HASH, auditHash } from "@/src/server/audit";
+import { compile } from "@/src/server/mandate/compile";
 import { type AuditEntry, buildAuditVerify } from "@/src/server/db/read/audit-view";
 import { buildFeed, buildWhy } from "@/src/server/db/read/feed-view";
 import { buildActive, buildHistory } from "@/src/server/db/read/mandate-view";
@@ -53,11 +55,27 @@ function chain(): AuditEntry[] {
     });
 }
 
+const COMPILE_TEXT = "Pay bills up to 200 yuan for SZ_POWER and CHINA_MOBILE. Never more than 500 a day. Ask me before cancelling.";
+
 const FIXTURE_DIRECTION: Record<number, "less" | "more"> = { 2: "less", 3: "more" };
 
-function generate(): Record<string, unknown> {
+/** What the compiler model drafts for the sample text; compile() fills the rest and reads it back. */
+const COMPILE_DRAFT = {
+  payees: { allow: ["SZ_POWER", "CHINA_MOBILE"] },
+  bills: { auto_pay_max: 200 },
+  subscriptions: { cancel: "confirm" },
+  global: { daily_outflow_cap: 500 },
+};
+const compileFixture = async (): Promise<unknown> => {
+  const models = { mandate_compiler: { chat: async () => { throw new Error("unused"); }, structured: async () => COMPILE_DRAFT } } as unknown as Pick<ModelClients, "mandate_compiler">;
+  const r = await compile(COMPILE_TEXT, { models, baseCurrency: "CNY" });
+  return { baseCurrency: "CNY", policy: r.policy, defaulted: r.defaulted, readback: r.readback };
+};
+
+async function generate(): Promise<Record<string, unknown>> {
   const entries = chain();
   return {
+    "mandates-compile.json": await compileFixture(),
     "audit-verify.json": buildAuditVerify({ ok: true, count: entries.length, firstBreakSeq: null }, entries, NOW),
     "mandates-active.json": buildActive(LIN_MANDATE_ROWS.find((r) => r.status === "active")!),
     // TODO(R2): drop the override when buildHistory classifies with compareMandates
@@ -69,6 +87,7 @@ function generate(): Record<string, unknown> {
 }
 
 const SCHEMAS: Record<string, z.ZodType> = {
+  "mandates-compile.json": S.MandateCompileResponse,
   "audit-verify.json": S.AuditVerifyResponse,
   "mandates-active.json": S.MandateActiveResponse,
   "mandates-history.json": S.MandateHistoryResponse,
@@ -80,8 +99,8 @@ const read = (f: string) => JSON.parse(readFileSync(join(DIR, f), "utf8")) as un
 
 describe("R2 fixtures/api", () => {
   if (process.env.UPDATE_FIXTURES === "1") {
-    it("regenerates the fixtures", () => {
-      for (const [f, v] of Object.entries(generate())) writeFileSync(join(DIR, f), `${JSON.stringify(v, null, 2)}\n`);
+    it("regenerates the fixtures", async () => {
+      for (const [f, v] of Object.entries(await generate())) writeFileSync(join(DIR, f), `${JSON.stringify(v, null, 2)}\n`);
     });
   }
 
@@ -92,8 +111,8 @@ describe("R2 fixtures/api", () => {
     });
   }
 
-  it("fixtures equal what the view builders produce", () => {
-    for (const [f, v] of Object.entries(generate())) expect(read(f), f).toEqual(JSON.parse(JSON.stringify(v)));
+  it("fixtures equal what the view builders produce", async () => {
+    for (const [f, v] of Object.entries(await generate())) expect(read(f), f).toEqual(JSON.parse(JSON.stringify(v)));
   });
 
   it("audit-verify.json hashes are a valid chain of the stored entries", () => {

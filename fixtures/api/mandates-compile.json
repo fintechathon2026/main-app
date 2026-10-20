@@ -1,0 +1,80 @@
+{
+  "baseCurrency": "CNY",
+  "policy": {
+    "base_currency": "CNY",
+    "fx": {
+      "rate_source": "ecb_reference",
+      "margin_pct": 10
+    },
+    "payees": {
+      "allow": [
+        "SZ_POWER",
+        "CHINA_MOBILE"
+      ],
+      "new_payee": "deny"
+    },
+    "bills": {
+      "auto_pay_max": 200,
+      "anomaly": {
+        "method": "median_mad",
+        "k": 0,
+        "alpha": 1,
+        "min_history": 1000
+      },
+      "pay_days_before_due": 0
+    },
+    "subscriptions": {
+      "cancel": "confirm",
+      "subscribe": "deny",
+      "renewal_notice_days": 7,
+      "renew_unseen_price_increase": "confirm",
+      "auto_cancel_trials": {
+        "enabled": false,
+        "days_before_charge": 1,
+        "notify_days_before": 3
+      }
+    },
+    "prepaid": {
+      "purchase": "deny",
+      "escrow_only": true,
+      "max_prepay": 0,
+      "auto_exit_on": [],
+      "attestation_max_age_days": 0,
+      "warn_on_soft_signals": true
+    },
+    "global": {
+      "daily_outflow_cap": 500
+    }
+  },
+  "defaulted": [
+    "fx.margin_pct",
+    "payees.new_payee",
+    "bills.anomaly.method",
+    "bills.anomaly.k",
+    "bills.anomaly.alpha",
+    "bills.anomaly.min_history",
+    "bills.pay_days_before_due",
+    "subscriptions.subscribe",
+    "subscriptions.renewal_notice_days",
+    "subscriptions.renew_unseen_price_increase",
+    "subscriptions.auto_cancel_trials.enabled",
+    "subscriptions.auto_cancel_trials.days_before_charge",
+    "subscriptions.auto_cancel_trials.notify_days_before",
+    "prepaid.purchase",
+    "prepaid.escrow_only",
+    "prepaid.max_prepay",
+    "prepaid.auto_exit_on",
+    "prepaid.attestation_max_age_days",
+    "prepaid.warn_on_soft_signals"
+  ],
+  "readback": [
+    "Pay bills automatically up to CNY 200 each; larger or unusual bills need your approval.",
+    "Pay only these payees: SZ_POWER, CHINA_MOBILE. New payees: blocked.",
+    "Total payments per day stay at or below CNY 500.",
+    "Cancel subscriptions: only with your approval. Start subscriptions: never.",
+    "Never cancel free trials automatically.",
+    "Prepaid packages: buy never, up to CNY 0, escrow only.",
+    "Never exit a prepaid plan automatically.",
+    "Foreign amounts are converted at the ECB reference rate plus 10% before checking limits."
+  ]
+}
