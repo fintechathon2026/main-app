@@ -6,6 +6,7 @@
 import { createPublicClient, defineChain, fallback, http, isAddress, type Address, type Chain, type PublicClient } from "viem";
 import { anvil, baseSepolia } from "viem/chains";
 import { PREPAID_ESCROW_ABI } from "./abi";
+import { KNOWN_DEPLOYMENTS } from "./deployments";
 import { planStatusFromCode, type ChainPlanStatus } from "./eip712";
 
 export type ChainConfig = {
@@ -28,6 +29,40 @@ export function chainConfigFromEnv(env: Env = process.env): ChainConfig | null {
     rpcUrls,
     escrowAddress: escrow,
     tokenAddress: token && isAddress(token) ? token : null,
+  };
+}
+
+export type ChainSyncEnvOptions = { startBlock: bigint; chunk?: number; confirmations?: number; logDelayMs?: number };
+
+function envInt(env: Env, name: string, min: number): number | undefined {
+  const v = env[name]?.trim();
+  if (!v) return undefined;
+  if (!/^\d+$/.test(v) || Number(v) < min || !Number.isSafeInteger(Number(v))) {
+    throw new Error(`${name} must be an integer >= ${min}`);
+  }
+  return Number(v);
+}
+
+/**
+ * chain-sync options from the env. Start block: CHAIN_START_BLOCK when set, else the deploy block
+ * of a known deployment at the configured escrow, else 0 (local anvil). A saved cursor still wins
+ * over it (runChainSync). CHAIN_LOG_CHUNK, CHAIN_CONFIRMATIONS and CHAIN_LOG_DELAY_MS are optional.
+ */
+export function chainSyncOptionsFromEnv(chain: Pick<ChainConfig, "chainId" | "escrowAddress">, env: Env = process.env): ChainSyncEnvOptions {
+  const start = env.CHAIN_START_BLOCK?.trim();
+  let startBlock: bigint;
+  if (start) {
+    if (!/^\d+$/.test(start)) throw new Error("CHAIN_START_BLOCK must be a block number");
+    startBlock = BigInt(start);
+  } else {
+    const known = KNOWN_DEPLOYMENTS[chain.chainId];
+    startBlock = known && known.escrow.toLowerCase() === chain.escrowAddress.toLowerCase() ? known.deployBlock : BigInt(0);
+  }
+  return {
+    startBlock,
+    chunk: envInt(env, "CHAIN_LOG_CHUNK", 1),
+    confirmations: envInt(env, "CHAIN_CONFIRMATIONS", 0),
+    logDelayMs: envInt(env, "CHAIN_LOG_DELAY_MS", 0),
   };
 }
 
