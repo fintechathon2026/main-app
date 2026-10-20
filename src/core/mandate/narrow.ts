@@ -42,10 +42,11 @@
 // subscriptions.renew_unseen_price_increase (confirm <= allow), cancel and subscribe
 // (deny <= confirm), budgets.move_between_categories (deny <= confirm).
 //
-// A KNOWN GAP (reported, not fixed here): the PRD's "alpha >= narrows" is not sound against
-// decide() under method "conformal" for short histories: conformalCheck fails closed when
-// alpha < 1/(n+1), so a larger alpha can be MORE permissive. Pinned as FINDING 1 in
-// src/core/gate/gate.property.test.ts. narrows() follows the PRD until that is resolved.
+// alpha under method "conformal" is the exception to the PRD's "alpha >= narrows":
+// conformalCheck fails closed when alpha < 1/(n+1), so a larger alpha can be MORE permissive,
+// and n is per bill. If either side is conformal, two different defined alphas are
+// "incomparable" in both directions. Dropping alpha (always confirm) is still narrower.
+// Pinned as FINDING 1 in src/core/gate/gate.property.test.ts.
 
 import type { Policy } from "./schema";
 
@@ -98,6 +99,19 @@ const PRICE_ORDER = ["confirm", "allow"] as const;
 const instant = (iso: string | undefined): number => (iso === undefined ? Number.POSITIVE_INFINITY : Date.parse(iso));
 const alphaOf = (a: number | undefined): number => a ?? Number.POSITIVE_INFINITY;
 
+/**
+ * alpha >= is narrower, except where either side is conformal: conformalCheck fails closed when
+ * alpha < 1/(n+1) and n (history length) is per bill, so two defined alphas have no static order
+ * ("incomparable"). An absent alpha is always-confirm in both methods, so dropping a defined
+ * alpha stays narrower.
+ */
+function alphaDir(next: Policy["bills"]["anomaly"], prev: Policy["bills"]["anomaly"]): Dir {
+  const d = higherIsNarrower(alphaOf(next.alpha), alphaOf(prev.alpha));
+  const conformal = next.method === "conformal" || prev.method === "conformal";
+  const bothDefined = next.alpha !== undefined && prev.alpha !== undefined;
+  return d !== null && conformal && bothDefined ? "incomparable" : d;
+}
+
 function diff(prev: Policy, next: Policy): FieldChange[] {
   const out: FieldChange[] = [];
   const add = (path: string, d: Dir) => {
@@ -115,7 +129,7 @@ function diff(prev: Policy, next: Policy): FieldChange[] {
   add("bills.auto_pay_max", lowerIsNarrower(nb.auto_pay_max, pb.auto_pay_max));
   add("bills.anomaly.method", unordered(nb.anomaly.method, pb.anomaly.method));
   add("bills.anomaly.k", lowerIsNarrower(nb.anomaly.k, pb.anomaly.k));
-  add("bills.anomaly.alpha", higherIsNarrower(alphaOf(nb.anomaly.alpha), alphaOf(pb.anomaly.alpha)));
+  add("bills.anomaly.alpha", alphaDir(nb.anomaly, pb.anomaly));
   add("bills.anomaly.min_history", higherIsNarrower(nb.anomaly.min_history, pb.anomaly.min_history));
   add("bills.pay_days_before_due", unordered(nb.pay_days_before_due, pb.pay_days_before_due));
 

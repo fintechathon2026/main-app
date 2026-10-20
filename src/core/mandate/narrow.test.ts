@@ -225,6 +225,32 @@ describe("compareMandates: other relations", () => {
     expect(narrows(next, BASE)).toBe(false);
   });
 
+  it("alpha under conformal has no static order: a change either way is incomparable", () => {
+    const conformal = (alpha?: number) =>
+      variant(
+        (d) => (d.bills.anomaly.method = "conformal"),
+        (d) => (alpha === undefined ? delete d.bills.anomaly.alpha : (d.bills.anomaly.alpha = alpha)),
+      );
+    const small = conformal(0.2);
+    const large = conformal(0.3);
+    const one = [{ path: "bills.anomaly.alpha", direction: "incomparable" }];
+    expect(compareMandates(small, large)).toEqual({ relation: "incomparable", changes: one });
+    expect(compareMandates(large, small)).toEqual({ relation: "incomparable", changes: one });
+    expect(narrows(large, small)).toBe(false);
+    expect(narrows(small, large)).toBe(false);
+    // dropping alpha (always confirm) is still narrower; adding one back is wider
+    const none = conformal(undefined);
+    expect(compareMandates(small, none)).toEqual({
+      relation: "narrowing",
+      changes: [{ path: "bills.anomaly.alpha", direction: "narrower" }],
+    });
+    expect(compareMandates(none, small).relation).toBe("widening");
+    // switching method with a changed alpha is not ordered either
+    const switched = variant((d) => (d.bills.anomaly.method = "conformal"), (d) => (d.bills.anomaly.alpha = 0.4));
+    expect(compareMandates(BASE, switched).relation).toBe("incomparable");
+    expect(narrows(switched, BASE)).toBe(false);
+  });
+
   it("an absent alpha is the strictest alpha", () => {
     const noAlpha = variant((d) => delete d.bills.anomaly.alpha);
     expect(narrows(noAlpha, BASE)).toBe(true);
