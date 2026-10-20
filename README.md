@@ -25,6 +25,18 @@ Reins fixes that in three steps:
 
 Reins also handles **prepaid packages** (gym, salon, tutoring). The money sits in escrow and is released one session at a time. If the business closes, you get the unused part back, and only you can receive it.
 
+## Early feedback from people in mainland China
+
+Our prepaid-package module is built around a Shenzhen persona, but nobody on the team lives in China. So we asked a few real people from mainland China, all students who go to the gym, about prepaying for gym and tutoring fees. This was informal: a short chat message with a handful of questions, answered in Mandarin and translated by us. It is not a survey, and the sample is too small to generalize.
+
+What they told us, paraphrased:
+
+- Paying for gym or tutoring in advance is normal, and getting a refund when something goes wrong is complicated.
+- One person said some gyms in financial trouble close suddenly and the owner disappears, so members cannot recover prepaid money. We treat this as a personal report, not a statistic.
+- One person said they would use an escrow like this if it had a clear legal basis, regulatory compliance and adequate security.
+- Opinions on price differed by city. A 4,800 yuan package was very expensive to one person and reasonable to another if it includes personal-training sessions.
+- One person worried that a third party holding the money could misuse it. This is why our escrow contract has no admin or upgrade functions and only moves money in two ways: a per-session release signed by both sides, or a refund to the plan owner (an early exit that the owner signs can also pay the gym a small, capped fee). A real deployment would still need a licensed operator and an audit. The contract here is a testnet prototype with a valueless token.
+
 ## Try it in two minutes (no keys, no database)
 
 You need Node 22 and pnpm 11.
