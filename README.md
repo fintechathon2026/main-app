@@ -25,6 +25,18 @@ Reins fixes that in three steps:
 
 Reins also handles **prepaid packages** (gym, salon, tutoring). The money sits in escrow and is released one session at a time. If the business closes, you get the unused part back, and only you can receive it.
 
+## Early feedback from people in mainland China
+
+Our prepaid-package module is built around a Shenzhen persona, but nobody on the team lives in China. So we asked a few real people from mainland China, all students who go to the gym, about prepaying for gym and tutoring fees. This was informal: a short chat message with a handful of questions, answered in Mandarin and translated by us. It is not a survey, and the sample is too small to generalize.
+
+What they told us, paraphrased:
+
+- Paying for gym or tutoring in advance is normal, and getting a refund when something goes wrong is complicated.
+- One person said some gyms in financial trouble close suddenly and the owner disappears, so members cannot recover prepaid money. We treat this as a personal report, not a statistic.
+- One person said they would use an escrow like this if it had a clear legal basis, regulatory compliance and adequate security.
+- Opinions on price differed by city. A 4,800 yuan package was very expensive to one person and reasonable to another if it includes personal-training sessions.
+- One person worried that a third party holding the money could misuse it. This is why our escrow contract has no admin or upgrade functions and only moves money in two ways: a per-session release signed by both sides, or a refund to the plan owner (an early exit that the owner signs can also pay the gym a small, capped fee). A real deployment would still need a licensed operator and an audit. The contract here is a testnet prototype with a valueless token.
+
 ## Try it in two minutes (no keys, no database)
 
 You need Node 22 and pnpm 11.
@@ -64,6 +76,39 @@ These are the guarantees the code enforces. The full list is in [`AGENTS.md`](AG
 - **The AI never edits your rules, adds payees, or writes the numbers you see.**
 - **Escrowed money has two exits only:** the merchant (one session at a time, with two signatures) or back to you.
 - **Everything is on the record.** The log is append-only and hash-chained, so a change or deletion shows up in the tamper check.
+
+## Architecture
+
+One Next.js app and one Postgres database. The AI proposes. A plain program decides. One piece of trusted code acts.
+
+```mermaid
+flowchart LR
+  U["User<br/>phone or laptop"] --> UI["Screens and API routes<br/>Next.js on Vercel"]
+  UI --> AG["Agent<br/>reads documents, plans,<br/>only proposes"]
+  AG --> AC[("Saved actions<br/>with an action hash")]
+  AC --> GT{"Policy Gate<br/>allow, ask or deny"}
+  GT -- "ask" --> AP["Approval card<br/>one action, once"]
+  AP --> EX
+  GT -- "allow" --> EX["Executor<br/>re-checks the Gate,<br/>runs at most once"]
+  EX --> BK["Mock bank<br/>bills and subscriptions"]
+  EX --> CH["Escrow contract<br/>prepaid packages"]
+  EX --> LG[("Audit log<br/>hash-chained")]
+  DB[("Supabase Postgres<br/>row-level security")] --- UI
+```
+
+**How to read it**
+
+| Step | What happens | Who is trusted |
+|---|---|---|
+| Agent | Reads a bill or notice in a sandbox with no tools, then proposes an action as ids and amounts | Not trusted. Document text can inform a suggestion but never decides who gets paid |
+| Policy Gate | A pure function checks the action against your signed rules and names the rule it used | Trusted code, no AI |
+| Approval | You approve exactly one action; the approval is tied to its hash and expires | You |
+| Executor | The only code that can move money. It checks the Gate again at that moment, reserves your daily limit, then calls the bank or the contract | Trusted code |
+| Audit log | Every decision is written once and linked to the one before it | Anyone can verify |
+
+**Prepaid packages.** You buy a package with a key made in your browser, which the server never sees. Each session needs your signature and the gym's. If the business closes, a signed official notice lets the agent send the unused money back, and the contract only allows it to go to you.
+
+Read more: [`docs/submission/system-architecture.md`](docs/submission/system-architecture.md) (one page) and [`docs/architecture.md`](docs/architecture.md) (full detail).
 
 ## What is real and what is simulated
 
