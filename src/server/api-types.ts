@@ -187,6 +187,43 @@ export type ApiError = { error: string; code?: string };
 /** Plain-language outcome shown on feed and evidence rows (docs/ui-direction.md §5). */
 export type UiStatus = "done" | "ask" | "suggest" | "blocked";
 
+// ---- R2: GET /api/feed, GET /api/feed/:id/why -----------------------------------------------
+
+/** One step of the Gate's recorded rule check, in plain words. Built from the stored trace. */
+export type FeedCheck = { label: string; passed: boolean };
+
+/**
+ * One thing Reins did or tried (an `actions` row that reached a decision). Every sentence is a
+ * template filled from stored ids and registry names; no model text (G6). `id` is the action id.
+ */
+export type FeedItem = {
+  id: string;
+  at: string;
+  status: UiStatus;
+  title: string;
+  detail: string;
+  amount?: Money;
+  ruleIds: string[];
+  mandateVersion: number;
+  origins: { origin: Origin; label: string; simulated?: boolean }[];
+  /** The "Rule check" steps, in the order the Gate ran them. */
+  checks: FeedCheck[];
+  tx?: { hash: string; explorerUrl: string };
+};
+/** Newest first. A bare array, like the Activity screen's stand-in. */
+export type FeedResponse = FeedItem[];
+
+export type FeedWhyResponse = {
+  id: string;
+  status: UiStatus;
+  decision: "allow" | "require_confirm" | "deny" | null;
+  mandateVersion: number;
+  /** Hash of the mandate the decision used (from the stored Gate result); null if none was stored. */
+  mandateHash: string | null;
+  ruleIds: string[];
+  checks: FeedCheck[];
+};
+
 // ---- R2: GET /api/audit/verify ------------------------------------------------------------
 
 /** One audit entry as the Evidence screen shows it. `event` is a template sentence, never model text. */
