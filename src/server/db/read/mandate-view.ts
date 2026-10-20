@@ -100,6 +100,10 @@ const parseLeaf = (s: string | undefined): Json => (s === undefined ? undefined 
  * src/core/mandate/narrow.ts once that branch lands; until then it is null (not classified).
  */
 export function buildHistory(rows: MandateRow[]): MandateHistoryResponse {
+  // Same integrity rule as the active card: a row whose stored hash does not match is an error.
+  for (const r of rows) {
+    if (hashPolicy(r.policyJson) !== r.policyHash) throw new MandateRowError(`stored mandate v${r.version} hash does not match its policy`);
+  }
   const asc = [...rows].sort((x, y) => x.version - y.version);
   return asc
     .map((r, i): MandateVersion => ({

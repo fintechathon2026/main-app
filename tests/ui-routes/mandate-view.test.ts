@@ -45,6 +45,12 @@ describe("buildHistory", () => {
     expect(buildHistory(LIN_MANDATE_ROWS).map((v) => v.direction)).toEqual([null, null, "first"]);
   });
 
+  it("fails on any row whose stored hash does not match its policy, like the active card", () => {
+    const tampered = LIN_MANDATE_ROWS.map((r) => (r.version === 2 ? { ...r, policyJson: { ...(r.policyJson as object), global: { daily_outflow_cap: 99999 } } } : r));
+    expect(() => buildHistory(tampered)).toThrow(MandateRowError);
+    expect(() => buildHistory([{ ...LIN_MANDATE_ROWS[0]!, policyHash: "0".repeat(64) }])).toThrow(/hash/);
+  });
+
   it("does not depend on row order", () => {
     expect(buildHistory([...LIN_MANDATE_ROWS].reverse())).toEqual(buildHistory(LIN_MANDATE_ROWS));
   });
