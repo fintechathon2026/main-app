@@ -36,6 +36,7 @@ anvil                                     # terminal 1
 The rehearsal uses anvil's public test keys. With local Supabase running, `scripts/chain-demo-setup.ts`
 then puts Lin's FitBox plan on the same anvil (see the header of that file for the env). On a
 restarted anvil the addresses repeat; the setup script clears stale local chain state (chain 31337 only).
+A rerun resumes Lin's existing active FitBox plan instead of buying a second one.
 
 ## Base Sepolia
 
@@ -49,3 +50,8 @@ restarted anvil the addresses repeat; the setup script clears stale local chain 
    and exit hashes from `broadcast/Spike.s.sol/84532/run-latest.json` in `docs/evidence/spike.md`.
 4. App env: `REINS_ESCROW=chain`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `CHAIN_START_BLOCK` (deploy block),
    `AGENT_ADDRESS` (= agent key's address), `ORACLE_ADDRESS`, plus the keys in their modules only.
+   When `CHAIN_START_BLOCK` is unset, chain-sync uses `deployBlock` from `deployments/84532.json` if
+   `ESCROW_ADDRESS` matches its `escrow` (copied in `src/server/chain/deployments.ts`; a test checks).
+   `CHAIN_LOG_CHUNK` is the max getLogs range in blocks (default 2000; shrunk automatically when the RPC
+   rejects the range). On Alchemy Free tier set `CHAIN_LOG_CHUNK=10`. `CHAIN_LOG_DELAY_MS` (default 0)
+   pauses between getLogs calls if the RPC answers 429.

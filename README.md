@@ -159,7 +159,7 @@ Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** 
 | Agent | `ANTHROPIC_API_KEY`, `REINS_MODELS` (`recorded` replays saved answers and needs no live calls) |
 | Mock bank and simulators | `MOCKBANK_API_KEY`, `MOCKBANK_DATABASE_URL`, `MOCKBANK_URL` and `SIM_BASE_URL` (both must be the deployed URL, not `localhost`), `SIM_API_KEY` |
 | Cron | `CRON_SECRET` |
-| Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, and the chain keys listed in `.env.example` |
+| Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, `CHAIN_LOG_CHUNK` (`10` on Alchemy Free tier), and the chain keys listed in `.env.example` |
 
 **Do not set these on a deployed site:** `REINS_FIXTURES` (serves fixture data without a session; ignored when `VERCEL_ENV=production`), `REINS_DEMO_AUTH`, `MOCKBANK_ENABLE_TEST_ROUTES`, `REINS_DEMO_TABLET` and `REINS_EVAL_DISABLE_GATE` (the app refuses to build an executor with it in production).
 

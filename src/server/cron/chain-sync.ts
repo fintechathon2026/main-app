@@ -5,7 +5,7 @@
 // prepaid_plans / prepaid_sessions from public.chain_cursors (src/server/chain/indexer.ts). An
 // incomplete chain env refuses instead of pretending to have synced.
 
-import { chainConfigFromEnv, publicClientFor } from "../chain/client";
+import { chainConfigFromEnv, chainSyncOptionsFromEnv, publicClientFor } from "../chain/client";
 import { runChainSync, type ChainSyncStats as IndexerStats } from "../chain/indexer";
 import { getPool } from "../db/pool";
 import { recordJobRun } from "../db/read/detect-store";
@@ -37,9 +37,7 @@ export async function runChainSyncJob(): Promise<ChainSyncStats> {
         client: publicClientFor(chain),
         escrow: chain.escrowAddress,
         userIds,
-        startBlock: BigInt(process.env.CHAIN_START_BLOCK ?? "0"),
-        confirmations: process.env.CHAIN_CONFIRMATIONS ? Number(process.env.CHAIN_CONFIRMATIONS) : undefined,
-        chunk: process.env.CHAIN_LOG_CHUNK ? Number(process.env.CHAIN_LOG_CHUNK) : undefined,
+        ...chainSyncOptionsFromEnv(chain),
       })),
     }),
     (r) => r,
