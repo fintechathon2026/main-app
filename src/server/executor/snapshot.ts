@@ -359,7 +359,7 @@ async function purchaseFacts(tx: PoolClient, snap: GateSnapshot, action: ActionR
   if (!/^[0-9a-f-]{36}$/i.test(offerId)) return;
   const o = (
     await tx.query(
-      `select o.unit_price::text as unit_price, o.units, o.cancel_fee_bps, extract(epoch from o.expires_at)::bigint::text as expires_at,
+      `select o.unit_price::text as unit_price, o.units, o.cancel_fee_bps,
               o.offer_json, m.chain_address, m.escrow_supported
          from public.prepaid_offers o join public.prepaid_merchants m on m.id = o.merchant_id
         where o.id = $1`,
@@ -373,10 +373,10 @@ async function purchaseFacts(tx: PoolClient, snap: GateSnapshot, action: ActionR
   facts.offer = offerRow;
   if (!payload || !facts.ownerWallet) return;
   const signed = payload.offer as OfferJson | undefined;
-  // Stored terms: the price, size and fee from the offer row; merchant from the merchant row; the
-  // expiry and nonce are part of what the merchant signed, so they come from the signed offer and
-  // the expiry is still bounded by the stored offer's expiry.
-  if (!signed || typeof signed !== "object" || Number(signed.expiresAt) > Number(o.expires_at)) return;
+  // Stored terms: the price, size and fee from the offer row; merchant from the merchant row. The
+  // expiry and nonce are what the merchant signed (the sim re-issues offers), so they come from the
+  // signed offer; expiry is checked against now by purchaseSignatureFacts.
+  if (!signed || typeof signed !== "object") return;
   const stored: OfferJson = {
     merchant: String(o.chain_address),
     unitPrice: Number(o.unit_price),
