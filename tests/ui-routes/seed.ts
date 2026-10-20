@@ -1,7 +1,10 @@
 // Owner: R2 (roles.md). Lin's decided actions as stored rows, the input of the feed view builder.
 // Gate traces follow src/core/gate/decide.ts (rule ids, result, reason keys).
 
+import { hashPolicy } from "@/src/core/mandate/canonical";
+import { LIN_MANDATE_V3 } from "@/src/core/mandate/examples";
 import type { FeedActionRow } from "@/src/server/db/read/feed-view";
+import type { MandateRow } from "@/src/server/db/read/mandate-view";
 
 export const TX = "0x5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c5e1f7a2c00000070";
 export const MANDATE_HASH = "9f3a1c0d7b5e4a2c8d6f1b3e5a7c9d0e2f4a6b8c0d1e3f5a7b9c1d2e4f6a8b0c";
@@ -107,4 +110,26 @@ export const LIN_FEED_ROWS: FeedActionRow[] = [
     result: { txHash: TX, simulated: false },
     gate: gate("allow", [ok("global.kill_switch"), ok("schema.prepaid_redeem"), ok("mandate.valid"), ok("provenance.prepaid_plan"), ok("prepaid.redeem")], ["prepaid.redeem"]),
   },
+];
+
+// ---- Mandates ----------------------------------------------------------------------------
+
+const WITHOUT_PREPAID = Object.fromEntries(Object.entries(LIN_MANDATE_V3).filter(([k]) => k !== "prepaid"));
+const V2 = { ...WITHOUT_PREPAID, version: 2 };
+const V1 = { ...V2, version: 1, bills: { ...LIN_MANDATE_V3.bills, auto_pay_max: 500 } };
+
+const mandate = (version: number, policy: unknown, signedAt: string, status: MandateRow["status"]): MandateRow => ({
+  version,
+  policyJson: policy,
+  policyHash: hashPolicy(policy),
+  signedAt,
+  status,
+  createdVia: version === 1 ? "template" : "nl",
+});
+
+/** Lin's three signed versions (the first two are superseded). */
+export const LIN_MANDATE_ROWS: MandateRow[] = [
+  mandate(1, V1, "2026-10-01T09:15:00.000Z", "superseded"),
+  mandate(2, V2, "2026-10-05T10:02:00.000Z", "superseded"),
+  mandate(3, LIN_MANDATE_V3, "2026-10-12T06:20:00.000Z", "active"),
 ];
