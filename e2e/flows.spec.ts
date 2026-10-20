@@ -54,7 +54,7 @@ test.describe("attack PDF blocked", () => {
     await page.getByRole("button", { name: /Payment to a new account/ }).click();
 
     await expect(detail(page).getByRole("heading", { name: "Rule check" })).toBeVisible();
-    await expect(detail(page).getByText("The account is not in your saved payees")).toBeVisible();
+    await expect(detail(page).getByText("The account is not in your saved payees", { exact: true })).toBeVisible();
     await expect(detail(page).getByText("Blocked").first()).toBeVisible();
     await expect(detail(page).getByText("Agent's note")).toBeVisible();
     await expect(detail(page).getByRole("button", { name: /Approve/ })).toHaveCount(0);
