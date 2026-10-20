@@ -2,6 +2,7 @@
 // fixtures in fixtures/api/. Each section names its route owner. Amounts are integers in the
 // user's base currency (yuan for Lin) unless a field says otherwise.
 
+import type { Policy } from "@/src/core/mandate/schema";
 import type { Origin } from "@/src/core/types";
 
 export type Money = { amount: number; currency: string };
@@ -223,6 +224,33 @@ export type FeedWhyResponse = {
   ruleIds: string[];
   checks: FeedCheck[];
 };
+
+// ---- R2: GET /api/mandates/active, GET /api/mandates/history --------------------------------
+
+/** The signed mandate in force: the Mandate Card's data. `policy` has every default applied. */
+export type MandateActiveResponse = {
+  version: number;
+  /** sha256 of the canonical stored policy, 64 lowercase hex. */
+  hash: string;
+  signedAt: string;
+  createdVia: "nl" | "template" | "edit";
+  policy: Policy;
+};
+
+export type MandateVersion = {
+  version: number;
+  signedAt: string;
+  /** One plain sentence built from the difference between this and the previous policy. */
+  change: string;
+  /**
+   * Less or more permission than the previous version. null = not classified yet: the live route
+   * returns null until compareMandates (src/core/mandate/narrow.ts) is wired in.
+   */
+  direction: "less" | "more" | "first" | null;
+  status: "active" | "superseded" | "revoked";
+};
+/** Newest first, like the Rules screen's stand-in. */
+export type MandateHistoryResponse = MandateVersion[];
 
 // ---- R2: GET /api/audit/verify ------------------------------------------------------------
 
