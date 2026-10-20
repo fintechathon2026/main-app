@@ -2,8 +2,7 @@
 // Export of the user's own hash-chained audit log (PRD FR10.4, §15.8; G7) as JSONL or CSV. Reads
 // under RLS for the signed-in user only. Each entry carries prevHash and hash, so the chain can
 // be re-verified offline with auditHash() from src/server/audit.
-// TODO(R3-08/R3-09): append the user's chain_txs with Basescan links once the chain adapter and
-// indexer exist (mock escrow ids are not on any explorer).
+// On-chain transactions with Basescan links are a separate export: GET /api/audit/transactions
 
 import { toCsv, toJsonl } from "@/src/core/export/serialize";
 import type { AuditExportEntry } from "../api-types";
