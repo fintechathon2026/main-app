@@ -20,19 +20,51 @@ import { MAX_MANDATE_TEXT, MandateCompileError, compile } from "@/src/server/man
 const Body = z.strictObject({ text: z.string().min(1).max(MAX_MANDATE_TEXT) });
 const badBody = () => jsonError(400, `body must be {text: string, 1 to ${MAX_MANDATE_TEXT} characters}`, "bad_request");
 
+/** 4000 characters of text is at most 16000 bytes of UTF-8, so 16 KiB covers every valid body. */
+const MAX_BODY_BYTES = 16 * 1024;
+const tooLarge = () => jsonError(413, `body must be at most ${MAX_BODY_BYTES} bytes`, "payload_too_large");
+
+/** Reads the JSON body with a byte cap: by content-length first, then while streaming. */
+async function readJson(req: Request): Promise<{ value: unknown } | Response> {
+  const declared = Number(req.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return tooLarge();
+  if (!req.body) return { value: undefined };
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel().catch(() => {});
+      return tooLarge();
+    }
+    chunks.push(value);
+  }
+  try {
+    return { value: JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown };
+  } catch {
+    return { value: undefined };
+  }
+}
+
 let models: ReturnType<typeof createModelClients> | null = null;
 
 export async function POST(req: Request): Promise<Response> {
   if (fixturesEnabled()) {
     await connection();
-    const body = Body.safeParse(await req.json().catch(() => undefined));
-    return body.success ? Response.json(fixture as MandateCompileResponse) : badBody();
+    const raw = await readJson(req);
+    if (raw instanceof Response) return raw;
+    return Body.safeParse(raw.value).success ? Response.json(fixture as MandateCompileResponse) : badBody();
   }
   return readRoute<MandateCompileResponse>(
     req,
     () => fixture as MandateCompileResponse,
     async (d) => {
-      const body = Body.safeParse(await req.json().catch(() => undefined));
+      const raw = await readJson(req);
+      if (raw instanceof Response) return raw;
+      const body = Body.safeParse(raw.value);
       if (!body.success) return badBody();
       const base = (await d.repos.settings(d.userId)).baseCurrency;
       if (base !== "CNY" && base !== "IDR") throw new Error(`unsupported base currency ${base}`);

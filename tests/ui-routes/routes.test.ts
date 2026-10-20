@@ -250,6 +250,44 @@ describe("POST /api/mandates/compile", () => {
     expect(blank.status).toBe(422);
   });
 
+  it("answers 413 for an oversized body before parsing it, by content-length or while streaming", async () => {
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    const big = JSON.stringify({ text: "x".repeat(20_000) });
+    for (const fixtures of [true, false]) {
+      vi.stubEnv("REINS_FIXTURES", fixtures ? "1" : "");
+      const declared = new Request("http://localhost/api/mandates/compile", {
+        method: "POST",
+        headers: { "content-type": "application/json", "content-length": String(big.length), "x-demo-user": LIN },
+        body: big,
+      });
+      const res = await POST(declared);
+      expect(res.status, `declared fixtures=${fixtures}`).toBe(413);
+      expect(await res.json()).toMatchObject({ code: "payload_too_large" });
+
+      // No content-length: the byte cap applies while reading.
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) {
+          const bytes = new TextEncoder().encode(big);
+          for (let i = 0; i < bytes.length; i += 4096) c.enqueue(bytes.slice(i, i + 4096));
+          c.close();
+        },
+      });
+      const streamed = new Request("http://localhost/api/mandates/compile", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-demo-user": LIN },
+        body: stream,
+        duplex: "half",
+      } as RequestInit);
+      expect((await POST(streamed)).status, `streamed fixtures=${fixtures}`).toBe(413);
+    }
+    expect(compileDeps.structured).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a body at the text limit", async () => {
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    expect((await POST(post({ text: "界".repeat(4000) }))).status).toBe(200); // fixture mode, 12 KB of UTF-8
+  });
+
   it("answers 503 when no recorded model answer exists for the text", async () => {
     vi.stubEnv("REINS_FIXTURES", "");
     const { RecordingMissError } = await import("@/src/agent/models");
