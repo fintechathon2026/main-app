@@ -158,6 +158,47 @@ describe.skipIf(!DB_ENABLED)("foundations: executor against Postgres + mock bank
     expect(paid.rows[0].s).toBeLessThanOrEqual(1000);
   });
 
+  // R2-09: 100 distinct payments, each run twice at once (200 concurrent runs). The cap must hold
+  // (G4) and every action may reach the bank at most once (G5).
+  it("100 parallel payments, each run twice, never exceed the cap and pay each bill at most once (G4, G5)", async () => {
+    const N = 100;
+    const bills = Array.from({ length: N }, (_, i) => ({ biller: "CHINA_MOBILE", amount: 98, key: `b${i}` }));
+    const u = await createTestUser(admin, bills);
+    const { ids } = await planPayments(
+      store,
+      u.id,
+      bills.map((b) => ({ billId: u.bills[b.key], billerId: "CHINA_MOBILE", amount: 98 })),
+    );
+    expect(ids).toHaveLength(N);
+    const runs = await Promise.all([...ids, ...ids].map((id) => executor.run(id, u.id)));
+    const byId = new Map<string, string[]>();
+    runs.forEach((r, i) => byId.set(ids[i % N], [...(byId.get(ids[i % N]) ?? []), r.status]));
+    // A duplicate run either sees the final outcome or finds the action in flight ("executing")
+    // and stops without settling; it never produces a second, different final outcome.
+    for (const statuses of byId.values()) {
+      const final = statuses.filter((s) => s !== "executing");
+      expect(final.length).toBeGreaterThanOrEqual(1);
+      expect(new Set(final).size).toBe(1);
+    }
+
+    const final = await admin.query("select id, status from public.actions where id = any($1::uuid[])", [ids]);
+    const succeeded = final.rows.filter((r) => r.status === "succeeded").map((r) => r.id as string);
+    expect(succeeded.length).toBe(Math.floor(1000 / 98));
+    expect(final.rows.filter((r) => r.status === "denied").length).toBe(N - succeeded.length);
+
+    const lim = await admin.query("select used from public.daily_limits where user_id = $1", [u.id]);
+    expect(Number(lim.rows[0].used)).toBe(succeeded.length * 98);
+    expect(Number(lim.rows[0].used)).toBeLessThanOrEqual(1000);
+
+    const paid = await admin.query(
+      "select bill_id, count(*)::int as n, sum(amount)::int as s from mockbank.payments where customer_id = $1 group by bill_id",
+      [u.id],
+    );
+    for (const p of paid.rows) expect(p.n).toBe(1);
+    expect(paid.rows.length).toBe(succeeded.length);
+    expect(paid.rows.reduce((a, p) => a + p.s, 0)).toBeLessThanOrEqual(1000);
+  }, 120_000);
+
   it("kill switch denies execution", async () => {
     const u = await createTestUser(admin, [{ biller: "CHINA_MOBILE", amount: 98, key: "mobile" }]);
     await admin.query("update public.kill_switch set enabled = true where user_id = $1", [u.id]);

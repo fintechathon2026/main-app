@@ -414,7 +414,8 @@ describe("decide: prepaid (architecture §24.9)", () => {
 
   // ---- Additional §24.9 rows (cap boundary, session mismatch, inactive/foreign plans, oracle
   // trigger, chain-only plan state). Same runner as the table above. ----
-  const signed = { consumerSigValid: true, merchantSigValid: true } as const;
+  // A signed redeem always carries the session number it was signed for (snapshot.ts sets it).
+  const signed = { consumerSigValid: true, merchantSigValid: true, sessionNo: 13 } as const;
   const user = (over: Partial<PrepaidFacts> = {}): PrepaidFacts => base({ actor: "user", ...signed, ...over });
   const exitFacts = (att: PrepaidFacts["attestation"], over: Partial<PrepaidFacts> = {}): PrepaidFacts =>
     base({ agentIsOurs: true, attestation: att, ...over });
@@ -440,6 +441,10 @@ describe("decide: prepaid (architecture §24.9)", () => {
     { name: "redeem, consumer signature missing", action: redeem(), facts: user({ consumerSigValid: false }), expected: "deny", rule: "prepaid.redeem" },
     { name: "redeem, signatures not evaluated", action: redeem(), facts: base({ actor: "user" }), expected: "deny", rule: "prepaid.redeem" },
     { name: "redeem, plan not read from the chain", action: redeem(), facts: user({ plan: null }), expected: "deny", rule: "provenance.prepaid_plan" },
+    // redeem: the signed session number was never established (fail closed, not "skip the check")
+    { name: "redeem, signed session number missing", action: redeem(13), facts: user({ sessionNo: undefined }), expected: "deny", rule: "prepaid.redeem" },
+    { name: "redeem, signed session number missing, otherwise valid with an approval", action: redeem(13), facts: user({ sessionNo: undefined }), expected: "deny", rule: "prepaid.redeem", over: { approval: { valid: true } } },
+    { name: "redeem, signed session number NaN", action: redeem(13), facts: user({ sessionNo: Number.NaN }), expected: "deny", rule: "prepaid.redeem" },
     // voluntary exit: inactive plan, someone else's plan, unknown plan
     ...INACTIVE.map((status): Row => ({ name: `voluntary exit, plan ${status}`, action: voluntary, facts: base({ actor: "user", consumerSigValid: true, plan: { ...plan, status } }), expected: "deny", rule: "prepaid.exit_voluntary" })),
     { name: "voluntary exit, another owner's plan", action: voluntary, facts: base({ actor: "user", consumerSigValid: true, ownerWallet: AGENT }), expected: "deny", rule: "prepaid.exit_voluntary" },
