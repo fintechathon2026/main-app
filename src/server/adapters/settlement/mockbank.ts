@@ -75,15 +75,22 @@ export function createMockbankSettlement(cfg: Cfg = {}): SettlementAdapter {
       });
       return settle(r, "confirmation");
     },
-    async transferInternal() {
-      throw new SettlementError("transfer_internal_not_implemented", true);
+    async transferInternal(a, o) {
+      // Amount only: the bank sweeps to the customer's own savings account.
+      const r = await call("POST", "/transfers/internal", {
+        customerId: o.customerId,
+        idempotencyKey: o.idempotencyKey,
+        body: { amount: a.amount, idempotency_key: o.idempotencyKey },
+      });
+      return settle(r, "transfer_id");
     },
     async lookup(idempotencyKey) {
       const r = await call("GET", `/operations/${encodeURIComponent(idempotencyKey)}`);
       if (r.status === 404) return null;
       const inner = r.json as { status_code?: number; response?: Record<string, unknown> } | null;
       if (!inner?.status_code || inner.status_code >= 300) return null;
-      return { status: "succeeded", reference: String(inner.response?.payment_id ?? inner.response?.confirmation ?? ""), raw: inner.response };
+      const ref = inner.response?.payment_id ?? inner.response?.confirmation ?? inner.response?.transfer_id ?? "";
+      return { status: "succeeded", reference: String(ref), raw: inner.response };
     },
   };
 }
@@ -116,18 +123,52 @@ export function createMockEscrow(cfg: Cfg & { agentAddress?: string } = {}): Esc
         unitsRedeemed: Number(p.units_redeemed),
       };
     },
+    async purchase(a, o: EscrowSendOpts) {
+      // Relayed: the escrow verifies both signatures; the plan owner is whoever signed `auth`.
+      const r = await call("POST", "/escrow/purchase", {
+        idempotencyKey: o.idempotencyKey,
+        body: {
+          offer: a.offer,
+          merchantSig: a.merchantSig,
+          auth: a.auth,
+          consumerSig: a.consumerSig,
+          ...(a.permit === undefined ? {} : { permit: a.permit }),
+          idempotency_key: o.idempotencyKey,
+        },
+      });
+      return toChain(r);
+    },
+    async redeem(a, o) {
+      const r = await call("POST", `/escrow/plans/${encodeURIComponent(a.chainPlanId)}/redeem`, {
+        idempotencyKey: o.idempotencyKey,
+        body: {
+          sessionNo: a.sessionNo,
+          deadline: a.deadline,
+          consumerSig: a.consumerSig,
+          merchantSig: a.merchantSig,
+          idempotency_key: o.idempotencyKey,
+        },
+      });
+      return toChain(r);
+    },
     async exitWithAttestation(a, o: EscrowSendOpts) {
-      // Sent from the agent address, like the real exitWithAttestation (agent key).
+      // Sent from the agent address, like the real exitWithAttestation (agent key). The escrow
+      // re-verifies the oracle signature on `attestation`; the id is for the call log.
       const r = await call("POST", `/escrow/plans/${encodeURIComponent(a.chainPlanId)}/exit-attested`, {
         idempotencyKey: o.idempotencyKey,
-        body: { caller: agent, attestation_id: a.attestationId, idempotency_key: o.idempotencyKey },
+        body: { caller: agent, attestation_id: a.attestationId, attestation: a.attestation, idempotency_key: o.idempotencyKey },
       });
       return toChain(r);
     },
     async exitVoluntary(a, o) {
       const r = await call("POST", `/escrow/plans/${encodeURIComponent(a.chainPlanId)}/exit-voluntary`, {
         idempotencyKey: o.idempotencyKey,
-        body: { caller: agent, idempotency_key: o.idempotencyKey },
+        body: {
+          caller: agent,
+          deadline: a.deadline,
+          consumerSig: a.consumerSig,
+          idempotency_key: o.idempotencyKey,
+        },
       });
       return toChain(r);
     },

@@ -13,6 +13,8 @@ import { appendAudit } from "@/src/server/audit";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
+import { verifiedVoluntaryExitSignature, type VoluntaryExitSignature } from "@/src/server/prepaid/exit-signature";
+import type { AttestationJson } from "@/src/sim/registry/eip712";
 import {
   ACTION_COLUMNS,
   buildSnapshot,
@@ -28,6 +30,21 @@ import {
 const ENTRY_STATUSES = ["planned", "ready", "awaiting_approval"];
 /** Reservations not finalized within this window are released by `reconcile` (PRD §10.4). */
 const RESERVATION_TTL_SECONDS = 60;
+/** Executor fail-closed rule (not a Gate rule): an approved prepaid_exit whose stored owner
+ *  signature no longer verifies in phase B. Same name as its audit event. */
+const CONSUMER_SIG_INVALID = "executor.consumer_signature_invalid";
+
+/** The Gate's result as the deny the executor enforces, so the action row and the audit log
+ *  explain it (G7). The Gate's own trace is kept; decide() is not involved. */
+function executorDeny(gate: GateResult, ruleId: string): GateResult {
+  return {
+    ...gate,
+    decision: "deny",
+    ruleIds: [ruleId],
+    reasons: [ruleId],
+    trace: [...gate.trace, { ruleId, result: "deny", reason: ruleId }],
+  };
+}
 
 export type ExecutorDeps = {
   settlement?: SettlementAdapter;
@@ -78,7 +95,14 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
     // ---- Phase B ------------------------------------------------------------------------
     type B =
       | { kind: "stop"; res: ExecResult }
-      | { kind: "go"; gate: GateResult; row: ActionRow; approved: boolean; attestationId: string | null };
+      | {
+          kind: "go";
+          gate: GateResult;
+          row: ActionRow;
+          approved: boolean;
+          attestationId: string | null;
+          exitSig: VoluntaryExitSignature | null;
+        };
     const b = await withUserTx<B>(userId, async (tx) => {
       const ctx = await userCtx(tx, userId);
       await tx.query("insert into public.daily_limits (user_id, day) values ($1, $2) on conflict do nothing", [userId, ctx.day]);
@@ -132,6 +156,37 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         return { kind: "stop", res: { actionId, status, gate } };
       }
 
+      const approved = gate.ruleIds.includes("approval.valid");
+      // An approved prepaid_exit settles with the owner's VoluntaryExit signature. Re-verify it in
+      // this transaction and fail closed before any cap is reserved or the approval consumed.
+      let exitSig: VoluntaryExitSignature | null = null;
+      if (cur.tool === "prepaid_exit" && approved) {
+        exitSig = facts.escrowPlan
+          ? await verifiedVoluntaryExitSignature(tx, actionId, {
+              chainPlanId: facts.escrowPlan.chainPlanId,
+              owner: facts.escrowPlan.owner,
+              nowSeconds: Math.floor(Date.parse(ctx.now) / 1000),
+            })
+          : null;
+        if (!exitSig) {
+          const denied = executorDeny(gate, CONSUMER_SIG_INVALID);
+          await tx.query("update public.actions set status = 'denied', decision = 'deny', rule_ids = $2, gate_json = $3 where id = $1", [
+            actionId,
+            denied.ruleIds,
+            JSON.stringify(denied),
+          ]);
+          await expireOpenApprovalsFor(tx, userId, [actionId], "consumer_signature_invalid");
+          // The Gate's `decision` event above stays the record of decide()'s output; this event
+          // records the executor's deny. Never includes the signature itself.
+          await appendAudit(tx, userId, {
+            actor: "system",
+            eventType: CONSUMER_SIG_INVALID,
+            data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash, gateDecision: gate.decision, result: denied },
+          });
+          return { kind: "stop", res: { actionId, status: "denied", gate: denied, error: "consumer_signature_invalid" } };
+        }
+      }
+
       if (gate.amountBase > 0) {
         const payee = cur.tool === "pay_bill" ? String(cur.args_json.biller_id) : null;
         await tx.query(
@@ -142,7 +197,6 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         await tx.query("update public.daily_limits set used = used + $3 where user_id = $1 and day = $2", [userId, ctx.day, gate.amountBase]);
       }
 
-      const approved = gate.ruleIds.includes("approval.valid");
       if (approved && !(await consumeApproval(tx, actionId, cur.args_hash))) {
         throw new Error("approval_consume_failed"); // rolls back the reservation too
       }
@@ -153,15 +207,15 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         [actionId, gate.ruleIds, JSON.stringify(gate), ENTRY_STATUSES],
       );
       if (u.rowCount !== 1) throw new Error("action_state_changed");
-      return { kind: "go", gate, row: cur, approved, attestationId };
+      return { kind: "go", gate, row: cur, approved, attestationId, exitSig };
     });
     if (b.kind === "stop") return b.res;
 
     // ---- Phase C ------------------------------------------------------------------------
-    const { gate, row, approved, attestationId } = b;
+    const { gate, row, approved, attestationId, exitSig } = b;
     let outcome: { status: "succeeded" | "failed" | "unknown"; result: unknown; error?: string };
     try {
-      outcome = { status: "succeeded", result: await settle(row, approved, attestationId) };
+      outcome = { status: "succeeded", result: await settle(row, approved, attestationId, exitSig) };
     } catch (e) {
       const definitive = e instanceof SettlementError && e.definitive;
       const code = e instanceof Error ? e.message : String(e);
@@ -171,7 +225,12 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
     return { actionId, status: outcome.status, gate, result: outcome.result, error: outcome.error };
   }
 
-  async function settle(row: ActionRow, approved: boolean, attestationId: string | null): Promise<unknown> {
+  async function settle(
+    row: ActionRow,
+    approved: boolean,
+    attestationId: string | null,
+    exitSig: VoluntaryExitSignature | null,
+  ): Promise<unknown> {
     const opts = { idempotencyKey: row.idempotency_key, customerId: row.user_id };
     const a = row.args_json;
     switch (row.tool) {
@@ -198,12 +257,21 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         if (!ids) throw new SettlementError("plan_not_found", true);
         if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
         const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
+        // The escrow re-verifies the oracle signature, so it gets the signed record the Gate used.
+        const attestation = approved
+          ? null
+          : await withUserTx(row.user_id, async (tx) => {
+              const r = await tx.query("select raw_json from public.attestations where id = $1", [attestationId]);
+              return (r.rows[0]?.raw_json as AttestationJson | undefined) ?? null;
+            });
+        if (!approved && !attestation) throw new SettlementError("attestation_missing", true);
         // Approved path: the Gate only upgrades an unattested exit to allow when the consumer's
-        // voluntary-exit signature verified (consumerSigValid) and an approval is valid. MOCK
-        // escrow: on chain this sends the consumer's exitVoluntaryBySig signature.
+        // voluntary-exit signature verified (consumerSigValid) and an approval is valid. The
+        // escrow gets exactly the signature phase B re-verified (exitVoluntaryBySig on chain).
+        if (approved && !exitSig) throw new SettlementError("consumer_signature_required", true);
         const res = approved
-          ? await escrow.exitVoluntary({ chainPlanId: ids.chain_plan_id }, sendOpts)
-          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId! }, sendOpts);
+          ? await escrow.exitVoluntary({ chainPlanId: ids.chain_plan_id, deadline: exitSig!.deadline, consumerSig: exitSig!.consumerSig }, sendOpts)
+          : await escrow.exitWithAttestation({ chainPlanId: ids.chain_plan_id, attestationId: attestationId!, attestation: attestation! }, sendOpts);
         if (res.status === "reverted") throw new SettlementError(res.reason, true, res);
         if (res.status === "pending") throw new SettlementError("pending", false, res);
         return { txHash: res.txHash, simulated: res.txHash.startsWith("mock:"), mode: approved ? "voluntary" : "attested", events: res.events };

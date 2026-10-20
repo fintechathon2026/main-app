@@ -9,6 +9,7 @@ import { actionHash, hashPolicy } from "@/src/core/mandate/canonical";
 import { parsePolicy, type Policy } from "@/src/core/mandate/schema";
 import { approvalState } from "@/src/server/approvals";
 import type { EscrowPlanState } from "@/src/server/adapters/settlement/types";
+import { verifiedVoluntaryExitSignature } from "@/src/server/prepaid/exit-signature";
 import { AttestationWire, recoverAttestationSigner } from "@/src/server/risk/attestation";
 import { attestationDomainFromEnv, attestationKindFromCode } from "@/src/sim/registry/eip712";
 
@@ -229,6 +230,7 @@ async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRo
   const planId = str(action.args_json.plan_id);
   const wallet = await tx.query("select address from public.wallets where user_id = $1 and kind = 'consumer_browser'", [userId]);
   const facts: PrepaidFacts = { actor: action.actor, ownerWallet: wallet.rows[0]?.address ?? null, plan: null };
+  facts.consumerSigValid = false;
 
   const row = /^[0-9a-f-]{36}$/i.test(planId)
     ? (
@@ -288,11 +290,18 @@ async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRo
             expired: new Date(chosen.expires_at).getTime() <= Date.parse(ctx.now),
           }
         : null;
+      // The owner's stored VoluntaryExit signature, recovered against the escrow plan's owner
+      // for this chain plan id and unexpired now (never taken from the action args).
+      facts.consumerSigValid =
+        (await verifiedVoluntaryExitSignature(tx, action.id, {
+          chainPlanId: row.chain_plan_id,
+          owner: chain.owner,
+          nowSeconds: Math.floor(Date.parse(ctx.now) / 1000),
+        })) !== null;
     }
   }
-  // User-signed prepaid actions (purchase, redeem, voluntary exit) need signature recovery,
-  // which is not implemented in this minimal version: the facts stay false, so the Gate denies.
-  facts.consumerSigValid = false;
+  // Other user-signed prepaid actions (purchase, redeem, the voluntary-exit tool) need signature
+  // recovery, which is not implemented in this minimal version: they stay false, so the Gate denies.
   facts.merchantSigValid = false;
   snap.prepaid = facts;
 }

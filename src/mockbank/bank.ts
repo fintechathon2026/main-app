@@ -6,6 +6,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { getMockbankPool, mbTx } from "./db";
+import { parseSweepAmount } from "./money";
 
 export class MockbankError extends Error {
   constructor(
@@ -17,7 +18,8 @@ export class MockbankError extends Error {
   }
 }
 
-export type MbResponse = { status: number; body: unknown };
+/** `raw` (exports only) is sent as-is instead of JSON; it is never stored as an operation. */
+export type MbResponse = { status: number; body: unknown; raw?: { text: string; contentType: string; filename: string } };
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
@@ -26,7 +28,7 @@ const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
  * stored and replayed for every later call with the same key. An advisory lock serializes
  * concurrent calls with the same key.
  */
-async function idempotent(key: string, kind: string, fn: (tx: PoolClient) => Promise<MbResponse>): Promise<MbResponse> {
+export async function idempotent(key: string, kind: string, fn: (tx: PoolClient) => Promise<MbResponse>): Promise<MbResponse> {
   if (!key) throw new MockbankError(400, "idempotency_key_required");
   return mbTx(async (tx) => {
     await tx.query("select pg_advisory_xact_lock(hashtext('mb:idem:' || $1))", [key]);
@@ -194,51 +196,110 @@ export function cancelSubscription(customerId: string, subscriptionId: string, i
   });
 }
 
-// ---- Mock escrow (architecture §24.13) --------------------------------------------------
+// ---- Internal transfers (savings sweep, FR11; 24h undo, FR11.2) -------------------------
 
-export async function getEscrowPlan(chainPlanId: string) {
-  const r = await getMockbankPool().query(
-    `select chain_plan_id::text as chain_plan_id, owner, merchant, agent, unit_price::int as unit_price, units_total,
-            units_redeemed, cancel_fee_bps, status, balance::bigint::text as balance
-       from mockbank.escrow_plans where chain_plan_id = $1`,
-    [chainPlanId],
-  );
-  if (!r.rowCount) throw new MockbankError(404, "plan_not_found");
-  return r.rows[0];
+/** Lock both accounts in id order so a sweep and a reverse cannot deadlock. */
+async function lockAccounts(tx: PoolClient, ids: string[]) {
+  await tx.query("select id from mockbank.accounts where id = any($1::uuid[]) order by id for update", [ids]);
 }
 
 /**
- * Mirrors PrepaidEscrow.exitWithAttestation / exitVoluntaryBySig: refunds go to the plan owner
- * only (there is no recipient parameter). Signature checks are NOT done here yet (owner: R3).
+ * Sweep `amount` from the customer's default account to their own savings account. The
+ * destination is resolved here from the bank's own records; the caller cannot name one.
  */
-export function escrowExit(chainPlanId: string, mode: "attested" | "voluntary", caller: string, idempotencyKey: string): Promise<MbResponse> {
-  return idempotent(idempotencyKey, `escrow_exit_${mode}`, async (tx) => {
-    const r = await tx.query("select * from mockbank.escrow_plans where chain_plan_id = $1 for update", [chainPlanId]);
-    const p = r.rows[0];
-    if (!p) throw new MockbankError(404, "plan_not_found");
-    if (p.status !== "active") throw new MockbankError(409, "plan_not_active");
-    const callerOk = caller.toLowerCase() === String(p.owner).toLowerCase() || caller.toLowerCase() === String(p.agent ?? "").toLowerCase();
-    if (mode === "attested" && !callerOk) throw new MockbankError(403, "caller_not_owner_or_agent");
-    const balance = BigInt(p.balance);
-    const fee = mode === "voluntary" ? (balance * BigInt(p.cancel_fee_bps)) / BigInt(10000) : BigInt(0);
-    const refund = balance - fee;
-    const txId = `mock:${randomUUID()}`;
-    await tx.query("update mockbank.escrow_plans set status = $2, balance = 0 where chain_plan_id = $1", [
-      chainPlanId,
-      mode === "attested" ? "exited_attested" : "exited_voluntary",
-    ]);
+export function transferInternal(customerId: string, req: { amount: number; idempotency_key: string }): Promise<MbResponse> {
+  return idempotent(req.idempotency_key, "transfer_internal", async (tx) => {
+    // numeric(14,2) text; all money arithmetic and comparisons happen in Postgres.
+    const amount = parseSweepAmount(req.amount);
+    if (!amount) throw new MockbankError(400, "invalid_request");
+    const src = await tx.query("select id, name, currency from mockbank.accounts where customer_id = $1 and is_default", [customerId]);
+    if (!src.rowCount) throw new MockbankError(422, "no_default_account");
+    const from = src.rows[0];
+    const dst = await tx.query(
+      `select id, name from mockbank.accounts
+        where customer_id = $1 and type = 'savings' and currency = $2 and id <> $3
+        order by name, id limit 1`,
+      [customerId, from.currency, from.id],
+    );
+    if (!dst.rowCount) throw new MockbankError(422, "no_savings_account");
+    const to = dst.rows[0];
+    await lockAccounts(tx, [from.id, to.id]);
+    const bal = await tx.query("select balance >= $2::numeric as enough from mockbank.accounts where id = $1", [from.id, amount]);
+    if (!bal.rows[0].enough) throw new MockbankError(422, "insufficient_funds");
+
+    const transferId = randomUUID();
+    await tx.query("update mockbank.accounts set balance = balance - $2::numeric where id = $1", [from.id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2::numeric where id = $1", [to.id, amount]);
+    await tx.query(
+      `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
+       values ($1, now(), -$3::numeric, $4, 'SWEEP TO SAVINGS'), ($2, now(), $3::numeric, $4, 'SWEEP FROM CHECKING')`,
+      [from.id, to.id, amount, from.currency],
+    );
+    const t = await tx.query(
+      `insert into mockbank.transfers (id, idempotency_key, customer_id, from_account_id, to_account_id, amount, currency,
+         status, reversible_until)
+       values ($1, $2, $3, $4, $5, $6::numeric, $7, 'succeeded', now() + interval '24 hours')
+       returning reversible_until`,
+      [transferId, req.idempotency_key, customerId, from.id, to.id, amount, from.currency],
+    );
     const body = {
-      status: "confirmed",
-      txHash: txId,
-      chainPlanId,
-      event: mode === "attested" ? "ExitedAttested" : "ExitedVoluntary",
-      refundTo: p.owner,
-      refund: refund.toString(),
-      fee: fee.toString(),
+      transfer_id: transferId,
+      status: "succeeded",
+      amount: Number(amount),
+      currency: from.currency,
+      from_account: maskId(from.id),
+      to_account: maskId(to.id),
+      reversible_until: new Date(t.rows[0].reversible_until).toISOString(),
     };
+    await emit(tx, customerId, "transfer.succeeded", body);
+    return { status: 201, body };
+  });
+}
+
+/** Undo a sweep within its window: money goes back to the account it came from. */
+export function reverseTransfer(customerId: string, transferId: string, idempotencyKey: string): Promise<MbResponse> {
+  return idempotent(idempotencyKey, "transfer_reverse", async (tx) => {
+    const r = await tx.query(
+      `select id, customer_id, from_account_id, to_account_id, amount::text as amount, currency, status,
+              now() > reversible_until as expired
+         from mockbank.transfers where id = $1 for update`,
+      [transferId],
+    );
+    const t = r.rows[0];
+    if (!t || t.customer_id !== customerId) throw new MockbankError(404, "transfer_not_found");
+    if (t.status === "reversed") throw new MockbankError(409, "transfer_already_reversed");
+    if (t.expired) throw new MockbankError(422, "reverse_window_expired");
+    await lockAccounts(tx, [t.from_account_id, t.to_account_id]);
+    const amount: string = t.amount; // numeric text; arithmetic and comparisons stay in Postgres
+    const bal = await tx.query("select balance >= $2::numeric as enough from mockbank.accounts where id = $1", [t.to_account_id, amount]);
+    if (!bal.rows[0].enough) throw new MockbankError(422, "insufficient_funds");
+
+    await tx.query("update mockbank.accounts set balance = balance - $2::numeric where id = $1", [t.to_account_id, amount]);
+    await tx.query("update mockbank.accounts set balance = balance + $2::numeric where id = $1", [t.from_account_id, amount]);
+    await tx.query(
+      `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor)
+       values ($1, now(), -$3::numeric, $4, 'SWEEP REVERSED'), ($2, now(), $3::numeric, $4, 'SWEEP REVERSED')`,
+      [t.to_account_id, t.from_account_id, amount, t.currency],
+    );
+    const u = await tx.query(
+      "update mockbank.transfers set status = 'reversed', reversed_at = now() where id = $1 returning reversed_at",
+      [t.id],
+    );
+    const body = {
+      transfer_id: t.id,
+      status: "reversed",
+      amount: Number(t.amount),
+      currency: t.currency,
+      reversed_at: new Date(u.rows[0].reversed_at).toISOString(),
+    };
+    await emit(tx, customerId, "transfer.reversed", body);
     return { status: 200, body };
   });
 }
+
+const maskId = (id: string) => mask(id.replace(/-/g, ""));
+
+// Mock escrow (architecture §24.13): see ./escrow.ts.
 
 // ---- Test hooks -------------------------------------------------------------------------
 
@@ -263,10 +324,14 @@ export async function injectBill(
 export async function injectTransaction(
   customerId: string,
   t: { amount: number; descriptor: string; currency?: string; original_amount?: number; original_currency?: string },
+  opts: { applyToBalance?: boolean } = {},
 ) {
   return mbTx(async (tx) => {
     const acct = await tx.query("select id from mockbank.accounts where customer_id = $1 and is_default", [customerId]);
     if (!acct.rowCount) throw new MockbankError(422, "no_default_account");
+    if (opts.applyToBalance) {
+      await tx.query("update mockbank.accounts set balance = balance + $2 where id = $1", [acct.rows[0].id, t.amount]);
+    }
     const r = await tx.query(
       `insert into mockbank.transactions (account_id, posted_at, amount, currency, descriptor, original_amount, original_currency)
        values ($1, now(), $2, $3, $4, $5, $6) returning id, posted_at, amount, currency, descriptor`,
@@ -307,10 +372,11 @@ export async function logCall(entry: {
   status: number;
   response: unknown;
   latencyMs: number;
+  customerId?: string | null;
 }) {
   await getMockbankPool().query(
-    `insert into mockbank.call_log (method, path, query, request_json, status, response_json, latency_ms)
-     values ($1, $2, $3, $4, $5, $6, $7)`,
+    `insert into mockbank.call_log (method, path, query, request_json, status, response_json, latency_ms, customer_id)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       entry.method,
       entry.path,
@@ -319,6 +385,32 @@ export async function logCall(entry: {
       entry.status,
       entry.response === undefined ? null : JSON.stringify(entry.response),
       Math.round(entry.latencyMs),
+      entry.customerId ?? null,
     ],
   );
+}
+
+export const CALL_LOG_COLUMNS = [
+  "id",
+  "created_at",
+  "customer_id",
+  "method",
+  "path",
+  "query",
+  "status",
+  "latency_ms",
+  "request_json",
+  "response_json",
+];
+
+/** Call-log rows ordered by id, optionally for one customer, after `since` (FR10.4 export). */
+export async function listCallLog(opts: { customerId?: string; since: number; limit: number }) {
+  const r = await getMockbankPool().query(
+    `select id::text as id, created_at, customer_id, method, path, query, status, latency_ms, request_json, response_json
+       from mockbank.call_log
+      where ($1::uuid is null or customer_id = $1) and id > $2
+      order by id limit $3`,
+    [opts.customerId ?? null, opts.since, opts.limit],
+  );
+  return r.rows as Record<string, unknown>[];
 }

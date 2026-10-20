@@ -148,4 +148,36 @@ export type ChatStreamEvent =
 
 export type ResumeResponse = { planId: string; status: "done" | "paused" | "failed"; feed: string[] };
 
+// ---- R3: GET|POST /api/kill-switch ------------------------------------------------------
+
+export type KillSwitchResponse = { enabled: boolean; changedAt: string | null };
+
+// ---- R3: GET|PATCH /api/settings --------------------------------------------------------
+
+export type SettingsResponse = {
+  profile: { email: string | null; displayName: string | null; locale: string; timezone: string; baseCurrency: string };
+  killSwitch: KillSwitchResponse;
+  mandateVersion: number | null;
+  dataSources: { id: string; type: string; status: "active" | "paused" | "revoked"; lastSyncedAt: string | null }[];
+};
+/** baseCurrency is not editable here: it is bound to the signed mandate (G6). */
+export type SettingsUpdateRequest = { displayName?: string; locale?: string; timezone?: string };
+
+// ---- R3: POST /api/admin/run-now ----------------------------------------------------------
+
+export type CronJob = "fx" | "detect" | "risk" | "cleanup" | "chain-sync";
+export type RunNowResponse = { job: CronJob; ok: boolean; scope: "user" | "global"; ranAt: string; stats: Record<string, unknown> };
+
+// ---- R3: GET /api/audit/export?format=jsonl|csv (one entry per line / row) ----------------
+
+export type AuditExportEntry = {
+  seq: number;
+  createdAt: string;
+  actor: "agent" | "user" | "gate" | "system";
+  eventType: string;
+  prevHash: string;
+  hash: string;
+  event: Record<string, unknown>;
+};
+
 export type ApiError = { error: string; code?: string };
