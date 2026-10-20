@@ -38,10 +38,26 @@ function setPath(root: Json, path: string, value: unknown): void {
   node[last] = value;
 }
 
-function build(c: GateCase, patch: Paths): { action: TypedAction; snapshot: GateSnapshot } {
+/** The { action, prepaid, policy } tree a case's dotted paths address, with `patch` applied. */
+function makeRoot(c: GateCase, patch: Paths): Json {
   const base = cases.bases[c.base];
   const root: Json = { action: clone(base.action), prepaid: clone(base.prepaid), policy: clone(LIN_MANDATE_V3) };
   for (const [path, value] of Object.entries(patch)) setPath(root, path, clone(value));
+  return root;
+}
+
+/** Dotted paths of the leaves (arrays and scalars) at which two trees differ. */
+function diffPaths(a: unknown, b: unknown, prefix = ""): string[] {
+  const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
+  if (isObj(a) && isObj(b)) {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    return [...keys].flatMap((k) => diffPaths(a[k], b[k], prefix ? `${prefix}.${k}` : k));
+  }
+  return JSON.stringify(a) === JSON.stringify(b) ? [] : [prefix];
+}
+
+function build(c: GateCase, patch: Paths): { action: TypedAction; snapshot: GateSnapshot } {
+  const root = makeRoot(c, patch);
   const snapshot: GateSnapshot = {
     now: cases.now,
     killSwitch: false,
@@ -70,8 +86,12 @@ describe("gate arm: case file", () => {
     for (const c of gateCases) expect(Object.keys(cases.bases)).toContain(c.base);
   });
 
-  it("injects and restores the same paths", () => {
-    for (const c of gateCases) expect(Object.keys(c.genuine).sort()).toEqual(Object.keys(c.inject).sort());
+  it("inject changes the base at exactly its paths and genuine restores the base", () => {
+    for (const c of gateCases) {
+      const base = makeRoot(c, {});
+      expect(diffPaths(base, makeRoot(c, c.inject)).sort(), c.id).toEqual(Object.keys(c.inject).sort());
+      expect(makeRoot(c, c.genuine), c.id).toEqual(base);
+    }
   });
 });
 
@@ -80,8 +100,9 @@ describe.each(gateCases.map((c) => [c.id, c] as const))("gate arm: %s", (_id, c)
     const { action, snapshot } = build(c, c.inject);
     const r = decide(action, snapshot);
     expect(r.decision).toBe(c.expected.gate.decision);
-    expect(r.decision).not.toBe("allow");
-    expect(c.expected.moneyMoved).toBe(false);
+    // The executor settles only on allow, so money moves exactly when the Gate allows.
+    const moneyMoved = r.decision === "allow";
+    expect(moneyMoved).toBe(c.expected.moneyMoved);
     for (const rule of c.expected.gate.ruleIds) expect(r.ruleIds).toContain(rule);
     for (const reason of c.expected.gate.reasons) expect(r.reasons).toContain(reason);
   });
