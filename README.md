@@ -94,6 +94,38 @@ Put the values that `pnpm exec supabase start` prints (database URLs, `NEXT_PUBL
 
 We have tested the routes and the executor against a local database, but the browser sign in against a real Supabase project has not been tried end to end yet. If it gives trouble, the quick mode above still shows every screen. For API calls without the browser, `REINS_DEMO_AUTH=1` accepts an `x-demo-user: <user id>` header (never in production).
 
+## Deploy (Vercel and a hosted Supabase project)
+
+Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** for the app and **Supabase** (supabase.com) for the database. The plan is in [`docs/architecture.md`](docs/architecture.md) §19. The deploy is not final yet (task R3-16), so treat these steps as the checklist, not a record of what ran.
+
+1. **Supabase project.** Create one (the demo project). Note the project ref, the database password, the project URL and the anon key.
+2. **Apply the migrations.** From the repo: `pnpm exec supabase link --project-ref <ref>`, then `pnpm exec supabase db push`. Never edit a migration that was already applied; add a new file.
+3. **Demo data.** `supabase/seed.sql` loads the demo user Lin for local runs. Loading it into a hosted project has not been tried.
+4. **Sign in links.** In the Supabase dashboard (Authentication, URL configuration) add the deployed site URL and `<site>/auth/callback` to the redirect URLs. Without this, the email link does not work on the deployed site.
+5. **Vercel project.** Import the repo, set the Node version to **22.x** (the project default is newer), and add the variables below.
+6. **Checks after deploy.** Open the site, sign in, open Home, then try Pause everything. Run `pnpm test` and `pnpm exec playwright test` before tagging `demo-*`.
+
+**Variables for Vercel** (names only; values stay out of git, see `.env.example` for all of them):
+
+| Group | Variables |
+|---|---|
+| Database | `DATABASE_URL` (pooled, transaction mode), `DATABASE_URL_DIRECT` (migrations and `pnpm db:checkpointer`) |
+| Sign in | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| Agent | `ANTHROPIC_API_KEY`, `REINS_MODELS` (`recorded` replays saved answers and needs no live calls) |
+| Mock bank and simulators | `MOCKBANK_API_KEY`, `MOCKBANK_DATABASE_URL`, `MOCKBANK_URL` and `SIM_BASE_URL` (both must be the deployed URL, not `localhost`), `SIM_API_KEY` |
+| Cron | `CRON_SECRET` |
+| Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, and the chain keys listed in `.env.example` |
+
+**Do not set these on a deployed site:** `REINS_FIXTURES` (serves fixture data without a session; ignored when `VERCEL_ENV=production`), `REINS_DEMO_AUTH`, `MOCKBANK_ENABLE_TEST_ROUTES`, `REINS_DEMO_TABLET` and `REINS_EVAL_DISABLE_GATE` (the app refuses to build an executor with it in production).
+
+## Escrow contract
+
+The contract (`PrepaidEscrow`) and the test token (`TestCNY`) are in [`contracts/`](contracts/). Build, test and the local rehearsal are in [`contracts/README.md`](contracts/README.md), which also has the Base Sepolia deploy steps. The rehearsal on a local chain prints three transaction hashes (purchase, check-in, attested exit).
+
+**Deployed addresses (Base Sepolia, chain 84532):** pending. The deploy has not been run, so `contracts/deployments/84532.json` does not exist yet. When it does, the addresses, the deploy block and the three transaction hashes with Basescan links go here and in `docs/evidence/`.
+
+The contract is a testnet demo with a valueless token and is **not audited**. See [`docs/submission/security-self-assessment.md`](docs/submission/security-self-assessment.md).
+
 ## Tests
 
 ```bash
@@ -109,6 +141,7 @@ pnpm exec playwright test          # browser flows on a production build
 |---|---|
 | [`docs/PRD_Reins_v2.0.md`](docs/PRD_Reins_v2.0.md) | What we are building and why |
 | [`docs/architecture.md`](docs/architecture.md) | How it is built: rule check, executor, data, escrow |
+| [`docs/submission/system-architecture.md`](docs/submission/system-architecture.md) | The system in one read: parts, trust zones, how one payment flows |
 | [`docs/submission/agent-design.md`](docs/submission/agent-design.md) | The agent graph and where security sits in it |
 | [`docs/submission/core-algorithms.md`](docs/submission/core-algorithms.md) | Detection, advice and summary algorithms |
 | [`docs/submission/injection-defenses.md`](docs/submission/injection-defenses.md) | How untrusted text is kept away from money |
