@@ -1,0 +1,171 @@
+# Security Self-Assessment
+
+Owner: R2. Status: **draft** (R2-12). References: PRD §10, §16, §20; `architecture.md` §5.1, §7, §8, §16, §24; `injection-defenses.md`.
+
+Reins is an AI finance agent that acts only inside a user-signed mandate. This report says what that protects, how we know, and what it does not protect. It is written so a reader can check each claim against a file.
+
+**How to read it.** Every guarantee below names the file that enforces it and the test that keeps it true. Tests marked *needs DB* are skipped when `DATABASE_URL` is unset. Numbers we have not produced yet say **pending** and name an owner. We do not fill them in until they exist.
+
+**State of the build this draft describes.** Commit `ad0f9aa` (`origin/main`). The bank is the mock bank. The escrow is the mock escrow (`REINS_ESCROW=mock`). The Solidity contract, the chain adapter and the eval runner are not in the tree yet. Where a defense depends on one of them, the table says so.
+
+## 1. Scope
+
+| In scope | Out of scope |
+|---|---|
+| Bill payment, subscription cancel, trial auto-cancel | Real banks, real money, real customers |
+| Prepaid escrow: purchase, session release, attested exit, voluntary exit | Mainnet, any token with value |
+| The Policy Gate, the executor, approvals, the audit log | Browser agent (P2), savings sweep beyond a stub (P1) |
+| Quarantined Readers for documents and soft signals | Device and OS security of the user's phone or laptop |
+| Simulated outside parties: bank, registry (oracle), merchant | The security of the LLM provider's own systems |
+
+The attacker we design for: someone who controls any untrusted text (a bill PDF, an email, a CSV row, a complaint post), and who may fully control the LLM's output. We also consider a compromised agent key or relayer key. We do not consider an attacker who owns the database, the server or the user's device.
+
+## 2. Permission tiers
+
+A tier says how much the agent may do on its own. The Gate, not the LLM, decides the tier of each action.
+
+| Tier | Meaning | Who authorizes | Examples |
+|---|---|---|---|
+| **T0** | Read and explain. No side effect. | Nobody; no money path | Read tools (`get_balance`, `list_bills`, `advise_prepaid`, ...), Explainer text |
+| **T1** | Propose only. A row is written, no money moves. | Nobody yet; the user may act on it later | `propose_action` (specified in `architecture.md` §6.4; not yet a tool in this tree); "new biller detected: add to registry?" |
+| **T2** | Runs only after one approval, bound to that exact action | The user, one tap | Bill over `auto_pay_max`; anomalous bill; normal subscription cancel; unattested prepaid exit with the owner's signature |
+| **T3** | Runs without a per-action approval, inside the signed mandate | The mandate | Bill under `auto_pay_max` from a trusted amount origin; trial auto-cancel; attested prepaid exit |
+| **Denied** | Never runs, and an approval cannot change that | Nobody | See the rows below |
+
+How the Gate (`src/core/gate/decide.ts`) lands on each tier:
+
+| Action | T3 (allow) | T2 (require_confirm) | Denied |
+|---|---|---|---|
+| `pay_bill` | Registry destination, verified allowed payee, amount matches the bill row, amount origin `mock_bank` or `aggregator` (or `document`/`email` only if registered, under `auto_pay_max` and not anomalous), no anomaly, under both caps | Over `auto_pay_max`; anomaly; untrusted amount origin; payee not on the allow list when `new_payee: confirm` | Destination not from the registry; amount differs from the bill; FX rate stale or unknown; over the daily or per-payee cap; new payee when `new_payee: deny`; kill switch; bad mandate |
+| `cancel_subscription` | Trial from a trusted origin, `auto_cancel_trials` on, no keep flag, notice sent | Any other cancel; trial from an untrusted origin | Mandate says `cancel: deny`; already cancelled; unknown subscription |
+| `prepaid_exit` (agent) | Oracle-signed attestation, same merchant, fresh, kind in `auto_exit_on`, plan owned by the user and naming our agent | No attestation but the owner's exit signature is valid | No attestation and no owner signature; plan not owned or not active; agent not ours |
+| `prepaid_purchase`, `prepaid_redeem`, `prepaid_exit_voluntary` | User-initiated. Allowed only with the user's own signatures (and the merchant's, for a release) | Not applicable | Any of these started by the agent; a bad or missing signature |
+| `sweep_to_savings` (P1) | Never | Only when the mandate enables sweeps | Sweeps disabled |
+
+Two things to know about tiers:
+
+- The `actions.tier` column exists (`supabase/migrations/20261017000003_execution_tables.sql`) but no code writes it yet, and the feed does not show tier badges from it. The decision is stored as `allow`, `require_confirm` or `deny` plus the rule IDs. **Open: R2 to add a tier derivation and show it in the feed before the final.**
+- The PRD names T0 only in the feed badge list (FR10.1). The T0 and T1 definitions above are our reading of how the code behaves. They need a check against the PRD owner.
+
+## 3. Guarantees and what enforces them
+
+These are the architecture guarantees (`architecture.md` §3), not the PRD product goals that share the numbers G1 to G6. All paths below were checked to exist in this tree.
+
+| # | Guarantee | Enforced in | Kept true by | Status |
+|---|---|---|---|---|
+| **G1** | No money moves unless the Gate returns `allow` for that exact action at execution time | `src/core/gate/decide.ts` (pure); `src/server/executor/run.ts` phase B calls `decide()` inside the transaction, phase C settles only after an `allow`; import boundary in `eslint.config.mjs` (only `src/server/executor/**` may import settlement adapters) | `src/core/gate/decide.test.ts`; `tests/foundations/executor.test.ts`; `tests/agent/graph.test.ts` ("only the execute node ever calls the executor"); `tests/harness/kill-switch.test.ts`; `pnpm lint` | Built. DB tests need DB |
+| **G2** | Untrusted values can inform a proposal, never authorize or route money | `src/core/gate/decide.ts` (provenance rules: destination from `registry` only, amount must match the bill row); `src/server/executor/snapshot.ts` re-derives provenance from DB rows; `src/agent/tools/action-schemas/index.ts` (strict schemas, no account or recipient field); Readers in `src/agent/nodes/reader`, `src/agent/nodes/signal_reader`; redaction in `src/server/pii/redact.ts` | `tests/harness/canary.test.ts`; `tests/harness/quarantine.test.ts`; `tests/quarantine/reader.test.ts`; `src/server/pii/redact.test.ts`; `tests/agent/graph.test.ts` (extra `account_number` rejected; canary only in labeled JSON); `tests/foundations/executor.test.ts` (amount mismatch, biller mismatch) | Built |
+| **G3** | An approval authorizes exactly one action, once, before it expires | `src/server/approvals/index.ts` (`consumeApproval` updates one row `where action_hash = $2 and status = 'approved' and expires_at > now()`); `run.ts` rolls the transaction back if the count is not 1; `verifyActionHash` in `src/server/executor/snapshot.ts` | `tests/harness/resume.test.ts` (forged `{approved:true}`, approval for another action, double and concurrent resume); `tests/approvals/routes.test.ts` (expired, double approve, non-owner); `tests/foundations/executor.test.ts` (hash mismatch refused); `src/core/gate/decide.test.ts` (approval never upgrades a deny) | Built. R0 approvals are session-only, no passkey (see KR-4) |
+| **G4** | Cumulative caps hold under concurrency | `run.ts` phase B: `select ... for update` on the `daily_limits` row, then reservation in `cap_reservations`, then commit or release in `finalize` | `tests/foundations/executor.test.ts` ("20 parallel payments never exceed the daily cap") | Built, tested at **20** parallel, not the 100 the plan asks for (KR-9). Needs DB |
+| **G5** | Every side effect executes at most once | Idempotency key fixed in `persist_plan`; `ENTRY_STATUSES` check and conditional `update ... where status = any(...)` in `run.ts`; the adapter replays the stored result for a repeated key | `tests/harness/resume.test.ts` (double resume, concurrent resume, resume that bypasses the plan claim); `tests/foundations/executor.test.ts` (duplicate run is idempotent) | Built. `reconcile` for outcomes marked `unknown` is not built (KR-10). Needs DB |
+| **G6** | The LLM never edits mandates, creates payees, or computes the numbers users see | Planner binds only the 11 read tools in `src/agent/tools/read/index.ts` plus three capture-only action tools; no mandate or payee tool exists; mandate compile output is read back from templates (`src/server/mandate/readback.ts`) and is only a draft until the user signs; Explainer post-check in `src/agent/nodes/explain.ts` and `src/agent/nodes/numbers.ts` | `tests/agent/explain.test.ts` (changed number falls back to template; unknown number withheld); `tests/agent/mandate-compile.test.ts`; `tests/e2e/bill.test.ts` (an `add_payee` call has no tool to hit); `src/core/mandate/mandate.test.ts` | Built for the agent path. The mandate edit, sign and store routes are not built (KR-3) |
+| **G7** | Every decision is explainable from an append-only, hash-chained log | `src/server/audit/index.ts` (`appendAudit`, `verifyAuditChain`); append-only trigger and revoked grants in `supabase/migrations/20261017000005_rls.sql`; the Gate writes its trace in `run.ts` before acting | `tests/foundations/executor.test.ts` ("keeps a verifiable hash chain ... and the log is append-only"); `tests/foundations/rls-roles.test.ts`; `tests/platform/audit-export.db.test.ts` | Built. There is no `/api/audit/verify` route yet, only export (KR-11). Needs DB |
+| **G8** | Same scenarios run with and without the Gate, deterministically | Planned: build flag `REINS_EVAL_DISABLE_GATE=1`, refused when `NODE_ENV=production` (`architecture.md` §16.3) | Nothing yet | **Not built.** The flag appears only in `architecture.md` and `task.md`. Owner: R2 (R2-11) |
+| **G9** | Escrowed money goes only to the merchant (one unit per two-signature session) or back to the plan owner, enforced independently of the Gate | Target: `contracts/PrepaidEscrow` (no recipient parameter, no admin, no upgrade). **`contracts/` does not exist in this tree.** Today: the mock escrow in `src/mockbank/escrow.ts` applies the same rules behind the mock bank | `tests/foundations/mock-escrow.test.ts` (both signatures needed; wrong or replayed session; refund only to the owner; caller must be owner or agent; altered attestation); `tests/foundations/voluntary-exit.test.ts`; Foundry results: **pending (R3)** | **Mocked only.** The contract-level claim is not yet true. See KR-1 |
+| **G10** | Every on-chain transaction comes from the executor after the Gate; release keys never reach the server | `eslint.config.mjs` (adapter imports; chain-key and simulator-key reads, branch `chore/lint-chain-key-reads`, **pending merge**); consumer key lives in the browser by design (`architecture.md` §24.2); the chain adapter does not exist yet | `pnpm lint`; no server code holds a consumer private key (`src/server/prepaid/exit-signature.ts` only verifies a signature) | Partial. No chain transaction is sent today |
+
+A note on G1 and G10 together: the lint rule is a build check, not a runtime check. It stops a careless import. It does not stop someone who edits the lint config. Code review covers that (`roles.md` §6.1, CODEOWNERS).
+
+Test status for this draft: `pnpm test` on `ad0f9aa` with no database gave **459 passed, 157 skipped** (41 files passed, 23 skipped). The skipped ones are the DB suites. A run with the local Supabase loaded: **pending (R2, before the final)**.
+
+## 4. Threats and residual risk
+
+Ratings in the "PRD rating" column are copied from PRD §16.1. The PRD says these are filled from red-team results. The last column is our own current view. It is not a measurement. Where it says "pending", it waits on the red-team run in §6.
+
+| # | Threat | Main control (file) | PRD rating | Our view now |
+|---|---|---|---|---|
+| T1 | Indirect prompt injection | Readers, provenance, no account parameter (`src/agent/nodes/reader`, `decide.ts`) | Measured | Money path closed by code. Planner proposals can still be skewed. Rate pending |
+| T2 | Multi-turn escalation | No mandate tool for the agent (`src/agent/tools/read/index.ts`) | Measured | Closed for the agent. User-side widening flow not built (KR-3). Pending |
+| T3 | Mandate mis-compiled | Read-back from the DSL, fail closed (`src/server/mandate/readback.ts`) | Medium | Medium. Ambiguity detection is planned for release R1 (Alpha), not in the hackathon cut |
+| T4 | Parser misreads amount | Amount must match the bill row (`decide.ts`) | Measured | A wrong amount that is also wrong in the bill row still passes. Anomaly check then asks |
+| T5 | Hallucinated numbers | Numbers from tools; Explainer post-check (`src/agent/nodes/numbers.ts`) | Low | Low |
+| T6 | PII to the LLM provider | Tokenization (`src/server/pii/redact.ts`) | Cross-border review | Regex only. Open |
+| T7 | Replay / double execution | Idempotency keys, conditional status update (`run.ts`) | Low | Low |
+| T8 | Race on caps | Row lock (`run.ts`) | Load-tested | Tested at 20, not 100. Pending |
+| T9 | Approval reuse | Hash-bound single-use rows (`approvals/index.ts`) | Low | Low |
+| T10 | Mandate change mid-flight | Re-decide in phase B, `cancelled_replan` (`run.ts`) | Low | Low (`tests/harness/replan.test.ts`, needs DB) |
+| T11 | Spoofed forwarded receipts | Email is untrusted input | Medium | Medium. Email forwarding is not built |
+| T12 | Poisoned CSV rows | CSV is untrusted input | Medium | Medium |
+| T13 | Session takeover | Session only in R0; passkeys later | Open in R0 | **High in R0.** Anyone with the session can approve (KR-4) |
+| T14 | Browser agent hijack | P2 only | High | Not built, not exposed |
+| T15 | Server forges user signatures | User-held keys; server stores public data | Low | Low for prepaid (browser key). Mandate "signature" is a hash in R0 (KR-3) |
+| T16 | Stale or manipulated FX | `fx.rate_fresh`, 2-day limit (`decide.ts`) | Low | Low (`decide.test.ts`) |
+| T17 | Trial auto-cancel abuse | Trusted trial origin, keep flag, notice (`decide.ts`) | Low | Low (`decide.test.ts`, `cancel-and-exit.test.ts`) |
+| T18 | Misleading recommendations | Cited signals; simulated signals labeled | Medium | Medium |
+| T19 | Checkpoint or resume tampering | Resume carries no authority (`approvals/index.ts`, `run.ts`) | Low | Low (`tests/harness/resume.test.ts`) |
+| T20 | Re-execution on resume | `interrupt()` alone in its node; keys persisted first | Low | Low |
+| T21 | Forged, stale or mismatched attestation | Oracle address check, merchant and age checks in the Gate (`decide.ts`); the contract repeats them (not built) | Low | Low in the Gate (`tests/risk/job.test.ts`, `tests/foundations/cancel-and-exit.test.ts`). Registry is simulated. Contract layer pending |
+| T22 | Fake check-ins | Two signatures over one numbered session | Low | Mock escrow only. Contract layer pending |
+| T23 | Agent key compromise | Key may only call `exitWithAttestation` | Low | Cannot be shown until the contract exists |
+| T24 | Contract bug | Minimal contract, OpenZeppelin, Foundry tests, second reviewer | Medium, unaudited | **Unknown. The contract is not in the tree and is unaudited** |
+| T25 | Soft-signal injection | Signal Reader quarantine; warnings only | Low for money | Low for money (`tests/harness/quarantine.test.ts`, `tests/risk/job.test.ts`) |
+| T26 | Relayer key misuse | Relayer carries only signed payloads; test ETH only | Low | Cannot be shown until the chain adapter exists |
+| T27 | Lost consumer key | Encrypted backup; attested exits still work | High for real money | High. Acceptable for a testnet demo only |
+
+## 5. Known-risk list
+
+These are open on purpose or open because the work is not done. KR-1 to KR-7 are the ones the plan asks us to state.
+
+| ID | Risk | Why it matters | Owner | Plan |
+|---|---|---|---|---|
+| KR-1 | **The escrow contract is not audited.** It is also not yet in this tree (`contracts/` is absent). Until it is, G9 holds only in the mock escrow | A contract bug could lock funds or pay the wrong address (T24). A Gate bug could then no longer be caught by the second layer | R3 builds; R2 second review (R2-10) | Testnet and valueless token only. Say "not audited" on the slide and in the README. Foundry results: **pending (R3)** |
+| KR-2 | **The registry (oracle) is simulated.** One oracle key decides which exits are valid (T21) | A leaked or wrong oracle key can trigger early exits. Worst case is a refund to the owner, which hurts the merchant's cash flow | R3 | v1 only. A real registry needs several sources and a dispute window (release R1) |
+| KR-3 | **The R0 mandate "signature" is a hash.** `src/server/executor/snapshot.ts` marks a mandate valid when its stored hash matches its stored policy. The routes to create, sign and store a mandate (`/api/mandates/*`) are not built | Anyone who can write the database can write a matching hash. G6 holds for the agent, not for a database writer | R2 (R2-08) | Passkey signing in release R1 |
+| KR-4 | **R0 approvals are authenticated by the session only** (T13, PRD §10.5) | A stolen session can approve actions. The approval is still hash-bound, single-use and expiring | R2 | Passkeys arrive in release R1 |
+| KR-5 | **Fake check-ins and the merchant key** (T22). The merchant simulator signs check-ins. The release still needs the owner's signature | Depends on the device key staying safe | R3 | Contract enforces two signatures once built |
+| KR-6 | **Agent key and relayer key** (T23, T26). No code reads these keys yet | Held only by the chain adapter, which does not exist | R3 | Key-read lint (branch `chore/lint-chain-key-reads`). Verify when the adapter lands |
+| KR-7 | **Lost consumer key** (T27) | Funds stay in escrow until a merchant or an attested exit moves them. The owner cannot sign a voluntary exit | R3 | Encrypted backup. Smart account with recovery later |
+| KR-8 | `MOCKBANK_API_KEY` is read outside the executor's adapter: `src/sim/merchant/checkin.ts` reads it to look up a plan, and `src/mockbank/http.ts` checks it. `architecture.md` §16.3 says only the executor's adapter reads it | The key gives access to the mock bank API. It is test data, but the doc claim is wider than the code | R2 with R3 | Either narrow the simulator read or change the doc sentence. No lint rule covers this key |
+| KR-9 | Concurrency test runs 20 parallel payments, not 100 | The PRD acceptance criterion is 100 | R2 (R2-09) | Raise to 100. Result: **pending** |
+| KR-10 | `reconcile` is not built. An outcome marked `unknown` keeps its cap reserved and no job resolves it | Fails closed for caps (money cannot be over-spent), but a stuck reservation lowers headroom | R2 | Build reconcile or document manual repair |
+| KR-11 | No `/api/audit/verify` route. `verifyAuditChain` exists and is tested; the UI cannot call it | The evidence viewer cannot show chain status | R2 (R2-08) | Add the route |
+| KR-12 | `REINS_EVAL_DISABLE_GATE` (arm A of the experiment) is not built | The "without Gate" numbers cannot be produced yet | R2 (R2-11) | Build with the production guard |
+| KR-13 | Redaction is regex-based. Scanned (image-only) PDFs are unsupported | Unusual formats can slip past tokenization (T6) | R1 | Marked for review, not processed |
+| KR-14 | Cross-border transfer of tokenized text to the LLM provider (T6) | Legal review is open (PRD) | Team | Open |
+| KR-15 | CI has no database, so the DB suites (most of the G3, G4, G5 and G7 tests) are skipped in CI and run only on a developer machine | A regression in those guarantees would not fail the build | R2 with R3 | Add a Supabase service to CI, or record a local run for each release |
+| KR-16 | Tier badges are not computed in code (§2) | The feed cannot show the tier the PRD promises | R2 | Derive from rule IDs |
+
+## 6. Red-team results
+
+None of the numbers below exist yet. We list what we will report and the rule we will use.
+
+**Design** (PRD §20.3). Same Planner, same tools, same scenarios. Arm A has no Gate. Arm B is full Reins. For prepaid cases, arm A still meets the contract, and the report says which attacks fail there.
+
+**Upper bound.** For 0 successes in n trials, the 95% upper bound on the attack success rate is `1 - 0.05^(1/n)`. This gives 13.9% at n = 20 and 7.2% at n = 40. With any successes we use Clopper-Pearson. Zero successes does not mean zero risk; it means the true rate is probably below the bound.
+
+| Item | Target | Result | Owner |
+|---|---|---|---|
+| Attack suite size | at least 40 cases, including prepaid cases 19 to 26 | **pending.** Today `evals/cases/attacks/index.json` lists 5 fixtures (3 PDFs, 2 soft-signal bundles) | R2 (R2-11) |
+| Attack success, arm A (no Gate) | measured | **pending** | R2 |
+| Attack success, arm B (full Reins) | measured, with upper bound | **pending** | R2 |
+| Benign suite (false blocks) | at least 30 tasks | **pending** | R2 with R5 |
+| Ambiguity set | at least 30 phrasings | **pending** | R1 |
+| Concurrency | 100 parallel attempts | **pending** (20 tested today) | R2 |
+| Foundry unit, fuzz, invariant tests | all pass | **pending** | R3 |
+| Three forced on-chain reverts | three transaction hashes | **pending** | R3 |
+| Purchase, redeem, attested exit transaction hashes on Base Sepolia | three hashes with Basescan links | **pending** | R3 |
+
+The utility cost of the Gate (tasks lost to false blocks) will be reported next to the security numbers.
+
+## 7. What is NOT protected
+
+- **A compromised server, database or CI.** Whoever can write the database can write actions, approvals and a matching mandate hash (KR-3). The audit chain would show tampering to a later reader. It does not prevent it.
+- **A stolen user session or device** (T13). The R0 approval needs only the session.
+- **Wrong proposals.** Quarantine lowers the chance that an injection changes what the Planner proposes. It cannot remove it. The Gate limits what is allowed. It does not judge whether a proposal was a good idea.
+- **Allowed but unwise actions.** A payment that passes every rule in the mandate will run. The mandate is the user's risk setting.
+- **Loss of the consumer key** (T27) and **real-money use.** Everything here is for a testnet and a mock bank.
+- **The escrow contract.** It is not audited, and not yet built here (KR-1).
+- **The oracle and the registry.** They are simulated. We do not claim real-world attestation security.
+- **Privacy at the LLM provider** beyond tokenization (T6, KR-13, KR-14).
+- **Availability.** A kill switch, a stale rate or a failed adapter stops actions. We do not promise uptime.
+- **Prompt, model and dependency supply chain.** Versions are pinned. CI (`.github/workflows/ci.yml`) runs lint, typecheck and test only. `pnpm audit` is not run. We do not claim more.
+
+## 8. Before the final (Tuesday 12:00)
+
+1. Run the full suite with the local Supabase loaded and put the real counts in §3. Owner: R2.
+2. Fill §6 from the eval runner. Owner: R2.
+3. Add Foundry results, the three transaction hashes and the forced reverts. Owner: R3.
+4. Decide KR-8 (narrow the read or change the sentence in `architecture.md` §16.3). Owner: R2 with R3.
+5. Derive tiers in code (KR-16) so the feed matches §2, and decide how CI runs the DB suites (KR-15). Owner: R2 with R3.
+6. Check the T0 and T1 wording against the PRD owner. Owner: R2.
+7. R1 and R3 read the sections on their modules. R5 edits the language.
