@@ -153,7 +153,7 @@
       "kind": "gate",
       "base": "attested_exit",
       "inject": { "policy.prepaid.auto_exit_on": [] },
-      "genuine": { "policy.prepaid.auto_exit_on": ["court_enforcement"] },
+      "genuine": { "policy.prepaid.auto_exit_on": ["court_enforcement", "closure_notice"] },
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
