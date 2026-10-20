@@ -37,3 +37,35 @@ Read from the escrow after the run (`getPlan(1)`, `remaining(1)`):
 - The escrow's oracle is `0x280F…BB6A`, the same as in the deployment file.
 
 Gate G1 passes: three confirmed Base Sepolia hashes for purchase, redeem and attested exit.
+
+---
+
+# End to end: Lin's FitBox plan through the app (M2)
+
+Plan 2 on the same escrow: 60 sessions × ¥100, fee 10%, agent = Reins' agent key. Bought and
+checked in by `scripts/chain-demo-setup.ts`, indexed into the app by `cron/chain-sync`, then exited
+by the agent after the registry simulator published a court-enforcement notice. The exit went
+through the full app path: risk job → agent plan → Policy Gate `allow`
+(`global.kill_switch`, `mandate.valid`, `schema.prepaid_exit`, `prepaid.exit_plan`,
+`prepaid.auto_exit_on`) → executor → chain adapter (agent key, `exitWithAttestation` only).
+
+| Step | Function | Sent by | Transaction |
+|---|---|---|---|
+| Purchase (60 × ¥100) | `purchaseWithPermit` | relayer | [0xcd52…ad9e](https://sepolia.basescan.org/tx/0xcd52cd94f5028eef2aff5322d03bc955ca56069e75db32b1cc2e5cf2ed52ad9e) |
+| Redeem session 1 | `redeem` | relayer | [0xf4c8…45cd](https://sepolia.basescan.org/tx/0xf4c881f55b8f12bdbd3c989b018f978615288ee769610d88ecac2d6876dc45cd) |
+| Redeem session 2 | `redeem` | relayer | [0xa055…534f](https://sepolia.basescan.org/tx/0xa055ab1d63654bc8330b91e6332e51c448b78391134ebefb2327cc1ee93a534f) |
+| Redeem session 3 | `redeem` | relayer | [0x80da…9054](https://sepolia.basescan.org/tx/0x80da89bc25516e9e6621b02c2147b18f1e51516f4a29274e330aa30cca449054) |
+| Redeem session 4 | `redeem` | relayer | [0x1b92…f314](https://sepolia.basescan.org/tx/0x1b924c43e9026357d1236b680d9ef9418e73a1e21d366d1338dcd8d4a582f314) |
+| Redeem session 5 | `redeem` | relayer | [0xf675…20f2](https://sepolia.basescan.org/tx/0xf6754ad9ce8b62b872288d100ac9d11b6963d0ef519b803e60e039088c8b20f2) |
+| Redeem session 6 | `redeem` | relayer | [0x759a…ac34](https://sepolia.basescan.org/tx/0x759a935c0c1d789ff89aa9701974e9e8d0ec42d2846b25194dfb92279f73ac34) |
+| Redeem session 7 | `redeem` | relayer | [0x0f5d…d302](https://sepolia.basescan.org/tx/0x0f5daf96f777ebe7c41a9fcf2473b36130c54e7c9dfc477cc5e1f97f5b6fd302) |
+| Redeem session 8 | `redeem` | relayer | [0x9833…406a](https://sepolia.basescan.org/tx/0x98337e492e610e9e0b99a7c12a392aa398dc5f469d2197d47c1af12603c2406a) |
+| Redeem session 9 | `redeem` | relayer | [0xca43…fbbf](https://sepolia.basescan.org/tx/0xca431228942975958a55e422541ec1638d644a30f0facb3b941ed6388bbffbbf) |
+| Redeem session 10 | `redeem` | relayer | [0x6c47…6420](https://sepolia.basescan.org/tx/0x6c4763f1f50c1e347ef51511ed37c65c8859710b8e49054b6f1f2e3d8bf86420) |
+| Redeem session 11 | `redeem` | relayer | [0xad04…f13c](https://sepolia.basescan.org/tx/0xad043a9c37405d897f0418484d016be1f8b92c151e15b62640c4495c8b95f13c) |
+| Redeem session 12 | `redeem` | relayer | [0x8087…c4b0](https://sepolia.basescan.org/tx/0x8087ede1efcd59066b3fe5e77f1aa9bb2d75e242147b40f54394294ae6c9c4b0) |
+| **Attested exit** (Gate allow, app path) | `exitWithAttestation` | agent | [0xa786…b6f5](https://sepolia.basescan.org/tx/0xa786c5bc17c289e87783ae07eec25d85cacb94833b65b44f021097a20068b6f5) |
+
+After the exit: `getPlan(2)` status `exited_attested`, `remaining(2) = 0`; the consumer received the
+unused 48 sessions (480,000 fen = ¥4,800). The app shows the exit in Activity with this Basescan
+link, the plan as "¥4,800 back with you", and the audit chain verifies.
