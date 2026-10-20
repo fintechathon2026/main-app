@@ -24,7 +24,8 @@ export type FeedActionRow = {
   /** ISO time the action ran, or was created if it never ran. */
   at: string;
   baseCurrency: string;
-  bill: { billerName: string | null; currency: string; dueDate: string; amountOrigin: Origin } | null;
+  /** `amount` is the bill row's amount (whole base units); the action's args are never a source for numbers. */
+  bill: { billerName: string | null; amount: number; currency: string; dueDate: string; amountOrigin: Origin } | null;
   subscription: { merchantName: string; amount: number; currency: string } | null;
   prepaid: { merchantName: string; unitPriceFen: number; unitsTotal: number; unitsRedeemed: number } | null;
 };
@@ -144,14 +145,11 @@ export function checksFromTrace(gate: unknown, mandateVersion: number): FeedChec
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayMonth = (ymd: string) => `${Number(ymd.slice(8, 10))} ${MONTHS[Number(ymd.slice(5, 7)) - 1] ?? ""}`.trim();
 
-const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 function amountOf(r: FeedActionRow): Money | undefined {
-  if (r.tool === "pay_bill" && r.bill) {
-    const a = num(r.args.amount);
-    return a === null ? undefined : { amount: a, currency: r.bill.currency };
-  }
+  // The amount shown is the bill row's (G6): args_json is model-written and only a lookup key.
+  if (r.tool === "pay_bill" && r.bill) return { amount: r.bill.amount, currency: r.bill.currency };
   if (r.tool === "cancel_subscription" && r.subscription) return { amount: r.subscription.amount, currency: r.subscription.currency };
   if (r.tool.startsWith("prepaid_") && r.prepaid) {
     const p = r.prepaid;

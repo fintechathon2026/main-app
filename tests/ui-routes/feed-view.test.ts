@@ -53,6 +53,12 @@ describe("buildFeed", () => {
     expect(JSON.stringify(item)).not.toMatch(/IGNORE|8812/);
   });
 
+  it("shows the bill row's amount, not the model-written args amount", () => {
+    const item = toFeedItem({ ...row("0004"), args: { ...row("0004").args, amount: 1 } })!;
+    expect(item.amount).toEqual({ amount: 88, currency: "CNY" });
+    expect(toFeedItem({ ...row("0004"), args: {} })!.amount).toEqual({ amount: 88, currency: "CNY" });
+  });
+
   it("does not call a failed or unconfirmed action done", () => {
     expect(toFeedItem({ ...row("0004"), status: "failed" })!.status).toBe("blocked");
     expect(toFeedItem({ ...row("0004"), status: "unknown" })!.detail).toMatch(/could not confirm/);

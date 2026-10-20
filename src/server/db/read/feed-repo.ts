@@ -15,7 +15,7 @@ const SELECT = `
          a.args_json, a.gate_json, a.result_json,
          coalesce(a.executed_at, a.created_at) as at,
          u.base_currency,
-         b.currency as bill_currency, b.due_date::text as bill_due, b.amount_origin as bill_origin, br.name as biller_name,
+         b.amount::float8 as bill_amount, b.currency as bill_currency, b.due_date::text as bill_due, b.amount_origin as bill_origin, br.name as biller_name,
          sm.canonical_name as sub_merchant, s.amount::float8 as sub_amount, s.currency as sub_currency,
          pm.name as prepaid_merchant, p.unit_price::float8 as unit_price, p.units_total, p.units_redeemed
     from public.actions a
@@ -43,7 +43,7 @@ function toRow(r: any): FeedActionRow {
     at: r.at instanceof Date ? r.at.toISOString() : new Date(r.at).toISOString(),
     baseCurrency: r.base_currency,
     bill: r.bill_due
-      ? { billerName: r.biller_name, currency: r.bill_currency, dueDate: r.bill_due, amountOrigin: zOrigin.catch("user").parse(r.bill_origin) }
+      ? { billerName: r.biller_name, amount: Number(r.bill_amount), currency: r.bill_currency, dueDate: r.bill_due, amountOrigin: zOrigin.catch("user").parse(r.bill_origin) }
       : null,
     subscription: r.sub_merchant ? { merchantName: r.sub_merchant, amount: Number(r.sub_amount), currency: r.sub_currency } : null,
     prepaid: r.prepaid_merchant

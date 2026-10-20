@@ -42,7 +42,7 @@ export const LIN_FEED_ROWS: FeedActionRow[] = [
     ruleIds: ["bills.auto_pay_max"],
     args: { bill_id: "b1000000-0000-4000-8000-000000000004", biller_id: "LANDLORD_WANG", amount: 3500 },
     at: "2026-10-19T01:12:00.000Z",
-    bill: { billerName: "Landlord Wang", currency: "CNY", dueDate: "2026-10-28", amountOrigin: "mock_bank" },
+    bill: { billerName: "Landlord Wang", amount: 3500, currency: "CNY", dueDate: "2026-10-28", amountOrigin: "mock_bank" },
     gate: gate(
       "require_confirm",
       [...billPrefix, ok("payees.allow"), { ruleId: "bills.auto_pay_max", result: "require_confirm", reason: "bills.over_auto_pay_max" }, ok("global.daily_outflow_cap")],
@@ -74,7 +74,7 @@ export const LIN_FEED_ROWS: FeedActionRow[] = [
     ruleIds: ["provenance.destination"],
     args: { bill_id: "b1000000-0000-4000-8000-000000000009", biller_id: "SZ_POWER", amount: 186 },
     at: "2026-10-18T09:05:00.000Z",
-    bill: { billerName: null, currency: "CNY", dueDate: "2026-10-30", amountOrigin: "email" },
+    bill: { billerName: null, amount: 186, currency: "CNY", dueDate: "2026-10-30", amountOrigin: "email" },
     gate: gate(
       "deny",
       [ok("global.kill_switch"), ok("schema.pay_bill"), ok("mandate.valid"), { ruleId: "provenance.destination", result: "deny", reason: "provenance.destination_not_registry" }],
@@ -90,7 +90,7 @@ export const LIN_FEED_ROWS: FeedActionRow[] = [
     ruleIds: [...billPrefix.map((s) => s.ruleId), "payees.allow", "bills.auto_pay_max", "global.daily_outflow_cap"],
     args: { bill_id: "b1000000-0000-4000-8000-000000000001", biller_id: "CHINA_MOBILE", amount: 88 },
     at: "2026-10-18T08:30:02.000Z",
-    bill: { billerName: "China Mobile", currency: "CNY", dueDate: "2026-10-20", amountOrigin: "mock_bank" },
+    bill: { billerName: "China Mobile", amount: 88, currency: "CNY", dueDate: "2026-10-20", amountOrigin: "mock_bank" },
     gate: gate(
       "allow",
       [...billPrefix, ok("payees.allow"), ok("bills.auto_pay_max"), ok("global.daily_outflow_cap")],
