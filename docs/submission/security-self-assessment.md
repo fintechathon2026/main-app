@@ -186,12 +186,12 @@ Ratings in the "PRD rating" column are copied from PRD §16.1. The PRD says thes
 | T18 | Misleading recommendations | Cited signals; simulated signals labeled | Medium | Medium |
 | T19 | Checkpoint or resume tampering | Resume carries no authority (`approvals/index.ts`, `run.ts`) | Low | Low (`tests/harness/resume.test.ts`) |
 | T20 | Re-execution on resume | `interrupt()` alone in its node; keys persisted first | Low | Low |
-| T21 | Forged, stale or mismatched attestation | Oracle address check, merchant and age checks in the Gate (`decide.ts`); the contract repeats them (not built) | Low | Low in the Gate (`tests/risk/job.test.ts`, `tests/foundations/cancel-and-exit.test.ts`). Registry is simulated. Contract layer pending |
-| T22 | Fake check-ins | Two signatures over one numbered session | Low | Mock escrow only. Contract layer pending |
-| T23 | Agent key compromise | Key may only call `exitWithAttestation` | Low | Cannot be shown until the contract exists |
-| T24 | Contract bug | Minimal contract, OpenZeppelin, Foundry tests, second reviewer | Medium, unaudited | **Unknown. The contract is not in the tree and is unaudited** |
+| T21 | Forged, stale or mismatched attestation | Oracle address check, merchant and age checks in the Gate (`decide.ts`); the contract repeats them (`PrepaidEscrow.sol:185-189`) | Low | Low in the Gate (`tests/risk/job.test.ts`, `tests/foundations/cancel-and-exit.test.ts`, `tests/chain/exit.e2e.test.ts`). Registry is simulated. Contract layer: tested in Foundry (`PrepaidEscrow.t.sol:368-410`), unaudited, not deployed. One attestation can exit many plans of a merchant (C2) |
+| T22 | Fake check-ins | Two signatures over one numbered session (`PrepaidEscrow.sol:164-167`) | Low | Contract and mock both enforce it (`PrepaidEscrow.t.sol:243-280`, `tests/foundations/mock-escrow.test.ts`). Contract unaudited, not deployed. The merchant simulator key sits in the same app (§3.2) |
+| T23 | Agent key compromise | Key may only call `exitWithAttestation` (`chain/escrow.ts:37-42`; contract `:184`, refund to consumer `:195`) | Low | Low by design: a stolen agent key can only trigger a refund to the owner, and only with a fresh oracle attestation. Not exercised on a public chain |
+| T24 | Contract bug | Minimal contract, OpenZeppelin, Foundry tests, second reviewer | Medium, unaudited | **Unknown. The contract is in the tree, tested by us, and unaudited.** Nine reviewer notes in §3.1 (C1 to C9). Second reviewer: pending (R2-10) |
 | T25 | Soft-signal injection | Signal Reader quarantine; warnings only | Low for money | Low for money (`tests/harness/quarantine.test.ts`, `tests/risk/job.test.ts`) |
-| T26 | Relayer key misuse | Relayer carries only signed payloads; test ETH only | Low | Cannot be shown until the chain adapter exists |
+| T26 | Relayer key misuse | Relayer carries only signed payloads; test ETH only; sends are simulated first (`chain/escrow.ts:181-189`) | Low | Low for funds: the contract checks every field (§3.1). The relayer can still waste gas (no price cap, `:191`) or stall a queue (KR-10) |
 | T27 | Lost consumer key | Encrypted backup; attested exits still work | High for real money | High. Acceptable for a testnet demo only |
 
 ## 5. Known-risk list
@@ -200,22 +200,25 @@ These are open on purpose or open because the work is not done. KR-1 to KR-7 are
 
 | ID | Risk | Why it matters | Owner | Plan |
 |---|---|---|---|---|
-| KR-1 | **The escrow contract is not audited.** It is also not yet in this tree (`contracts/` is absent). Until it is, G9 holds only in the mock escrow | A contract bug could lock funds or pay the wrong address (T24). A Gate bug could then no longer be caught by the second layer | R3 builds; R2 second review (R2-10) | Testnet and valueless token only. Say "not audited" on the slide and in the README. Foundry results: **pending (R3)** |
+| KR-1 | **The escrow contract is not audited.** It is in the tree (`contracts/src/PrepaidEscrow.sol`) but not deployed, and it is not the default (KR-17) | A contract bug could lock funds or pay the wrong address (T24). A Gate bug could then no longer be caught by the second layer. See C1 to C9 in §3.1 | R3 builds; R2 second review (R2-10) | Testnet and valueless token only. Say "not audited" on the slide and in the README. Foundry pass count: **pending (R3)**. Second review: **pending (R2)** |
 | KR-2 | **The registry (oracle) is simulated.** One oracle key decides which exits are valid (T21) | A leaked or wrong oracle key can trigger early exits. Worst case is a refund to the owner, which hurts the merchant's cash flow | R3 | v1 only. A real registry needs several sources and a dispute window (release R1) |
 | KR-3 | **The R0 mandate "signature" is a hash.** `src/server/executor/snapshot.ts` marks a mandate valid when its stored hash matches its stored policy. The routes to create, sign and store a mandate (`/api/mandates/*`) are not built | Anyone who can write the database can write a matching hash. G6 holds for the agent, not for a database writer | R2 (R2-08) | Passkey signing in release R1 |
 | KR-4 | **R0 approvals are authenticated by the session only** (T13, PRD §10.5) | A stolen session can approve actions. The approval is still hash-bound, single-use and expiring | R2 | Passkeys arrive in release R1 |
-| KR-5 | **Fake check-ins and the merchant key** (T22). The merchant simulator signs check-ins. The release still needs the owner's signature | Depends on the device key staying safe | R3 | Contract enforces two signatures once built |
-| KR-6 | **Agent key and relayer key** (T23, T26). No code reads these keys yet | Held only by the chain adapter, which does not exist | R3 | Key-read lint (branch `chore/lint-chain-key-reads`). Verify when the adapter lands |
-| KR-7 | **Lost consumer key** (T27) | Funds stay in escrow until a merchant or an attested exit moves them. The owner cannot sign a voluntary exit | R3 | Encrypted backup. Smart account with recovery later |
+| KR-5 | **Fake check-ins and the merchant key** (T22). The merchant simulator signs check-ins. The release still needs the owner's signature | Depends on the device key staying safe. The merchant simulator key is read by `src/sim/merchant/keys.ts:16` in the same app that holds the relayer and agent keys | R3 | Contract enforces two signatures (`PrepaidEscrow.sol:165-167`) |
+| KR-6 | **Agent key and relayer key** (T23, T26). Read only at `chain/escrow.ts:327-328`. The key-read lint rule is on main (`eslint.config.mjs:85-102`) | A server compromise yields both keys, and the oracle and merchant simulator keys if they share the deployment. The lint rule does not cover tests, scripts or computed property names (§3.2) | R3 | Keep keys in separate env scopes for a public demo. Not run for this update: `pnpm lint` |
+| KR-7 | **Lost consumer key** (T27). The key is stored as plain hex in the browser's IndexedDB (`consumer-key.ts:43-45`). Only the backup file is encrypted | Funds stay in escrow until a merchant or an attested exit moves them. The owner cannot sign a voluntary exit. Script injection on our origin could read the key | R3 | Encrypted backup. Smart account with recovery later (the contract accepts only EOA signatures, C6) |
 | KR-8 | `MOCKBANK_API_KEY` is read outside the executor's adapter: `src/sim/merchant/checkin.ts` reads it to look up a plan, and `src/mockbank/http.ts` checks it. `architecture.md` §16.3 says only the executor's adapter reads it | The key gives access to the mock bank API. It is test data, but the doc claim is wider than the code | R2 with R3 | Either narrow the simulator read or change the doc sentence. No lint rule covers this key |
 | KR-9 | Concurrency test runs 20 parallel payments, not 100 | The PRD acceptance criterion is 100 | R2 (R2-09) | Raise to 100. Result: **pending** |
-| KR-10 | `reconcile` is not built. An outcome marked `unknown` keeps its cap reserved and no job resolves it | Fails closed for caps (money cannot be over-spent), but a stuck reservation lowers headroom | R2 | Build reconcile or document manual repair |
-| KR-11 | No `/api/audit/verify` route. `verifyAuditChain` exists and is tested; the UI cannot call it | The evidence viewer cannot show chain status | R2 (R2-08) | Add the route |
-| KR-12 | `REINS_EVAL_DISABLE_GATE` (arm A of the experiment) is not built | The "without Gate" numbers cannot be produced yet | R2 (R2-11) | Build with the production guard |
+| KR-10 | `reconcile` is not built (`run.ts:7`, `:32`, `:383` and `chain/escrow.ts:132` only mention it). An outcome marked `unknown` keeps its cap reserved and no job resolves it. A signed but unbroadcast chain transaction is not re-sent by any job | Fails closed for caps (money cannot be over-spent), but a stuck reservation lowers headroom and a stuck nonce can hold later transactions from that sender (§3.2) | R2 with R3 | Build reconcile or document manual repair |
+| KR-11 | **Resolved.** `GET /api/audit/verify` now exists (`app/api/audit/verify/route.ts`) and the Evidence screen reads it (`src/ui/screens/evidence.tsx`). Route tests: `tests/ui-routes/routes.test.ts` | None open from the draft | R2 | Keep as a record |
+| KR-12 | `REINS_EVAL_DISABLE_GATE` (arm A of the experiment) and its production guard: **pending**. We find neither in `src/`, `app/` or `scripts/` | The "without Gate" numbers cannot be produced yet, and no code refuses to start with the flag in production (`task.md` I-04 is open) | R2 (R2-11) | Build with the production guard. Another branch may add it; this row changes only when it is on main |
 | KR-13 | Redaction is regex-based. Scanned (image-only) PDFs are unsupported | Unusual formats can slip past tokenization (T6) | R1 | Marked for review, not processed |
 | KR-14 | Cross-border transfer of tokenized text to the LLM provider (T6) | Legal review is open (PRD) | Team | Open |
-| KR-15 | CI has no database, so the DB suites (most of the G3, G4, G5 and G7 tests) are skipped in CI and run only on a developer machine | A regression in those guarantees would not fail the build | R2 with R3 | Add a Supabase service to CI, or record a local run for each release |
-| KR-16 | Tier badges are not computed in code (§2) | The feed cannot show the tier the PRD promises | R2 | Derive from rule IDs |
+| KR-15 | CI has no database and no anvil. The `check` job (`.github/workflows/ci.yml:9-21`) runs lint, typecheck and `pnpm test`, so the DB suites (most of the G3, G4, G5 and G7 tests) and the chain suites (`tests/chain/*`, skipped without anvil, `contracts/out` or a database) are skipped in CI and run only on a developer machine. The `contracts` job (`:23-36`) does run `forge test` | A regression in those guarantees would not fail the build | R2 with R3 | Add a Supabase service and anvil to CI, or record a local run for each release |
+| KR-16 | Tier badges are not computed in code (§2). We found no code under `src/` or `app/` that writes `actions.tier` | The feed cannot show the tier the PRD promises | R2 | Derive from rule IDs |
+| KR-17 | **The escrow is the mock by default, and the Base Sepolia deployment and spike are not done.** `REINS_ESCROW=mock` is the default (`run.ts:82`, `.env.example:49`). `contracts/deployments/` holds only `.gitkeep`. `docs/evidence/` does not exist. `README.md:79` still says the contract "is not built yet", which is out of date | Every on-chain claim in this report is about code that has only run on a local anvil or in Foundry. No transaction hash exists. The demo may run on the mock unless `REINS_ESCROW=chain` is set | R3 | Deploy, run `Spike.s.sol`, record hashes in `docs/evidence/spike.md` (`contracts/README.md`). **Pending (R3)**. R2 to fix the README line |
+| KR-18 | **The Playwright suite is not in CI.** `e2e/flows.spec.ts` runs on fixtures (`REINS_FIXTURES=1`) with `pnpm exec playwright test`; `ci.yml` has no Playwright step. Three of five planned flows are covered, and there is no spec for prepaid buy, check-in or exit (`task.md` R4-10) | UI regressions, including the approval and signing screens, do not fail the build | R4 | Add a CI job, or run it by hand before each release |
+| KR-19 | **Contract notes C1 to C9** in §3.1 are open until the contract owner and the second reviewer decide each one | Some are wording (C1), some are design (C2, C3, C6), some are test gaps (C4, C5) | R3 with R2 | Decide, then fix the contract, the test or the sentence |
 
 ## 6. Red-team results
 
@@ -227,13 +230,13 @@ None of the numbers below exist yet. We list what we will report and the rule we
 
 | Item | Target | Result | Owner |
 |---|---|---|---|
-| Attack suite size | at least 40 cases, including prepaid cases 19 to 26 | **pending.** Today `evals/cases/attacks/index.json` lists 5 fixtures (3 PDFs, 2 soft-signal bundles) | R2 (R2-11) |
+| Attack suite size | at least 40 cases, including prepaid cases 19 to 26 | **pending.** Today `evals/cases/attacks/index.json` lists 5 fixtures (3 PDFs, 2 soft-signal bundles). `evals/cases/gate/index.json` adds 17 Gate-only cases for categories 19 to 22, 25 and 26, run by `tests/evals/gate-arm.test.ts`. They are cases, not results: no success rate has been measured | R2 (R2-11) |
 | Attack success, arm A (no Gate) | measured | **pending** | R2 |
 | Attack success, arm B (full Reins) | measured, with upper bound | **pending** | R2 |
 | Benign suite (false blocks) | at least 30 tasks | **pending** | R2 with R5 |
 | Ambiguity set | at least 30 phrasings | **pending** | R1 |
 | Concurrency | 100 parallel attempts | **pending** (20 tested today) | R2 |
-| Foundry unit, fuzz, invariant tests | all pass | **pending** | R3 |
+| Foundry unit, fuzz, invariant tests | all pass | **pending (pass count).** The `contracts` CI job runs them (`ci.yml:23-36`) and the `ci` workflow succeeded on `4ac4669`. We did not run `forge test` locally for this update | R3 |
 | Three forced on-chain reverts | three transaction hashes | **pending** | R3 |
 | Purchase, redeem, attested exit transaction hashes on Base Sepolia | three hashes with Basescan links | **pending** | R3 |
 
@@ -245,8 +248,8 @@ The utility cost of the Gate (tasks lost to false blocks) will be reported next 
 - **A stolen user session or device** (T13). The R0 approval needs only the session.
 - **Wrong proposals.** Quarantine lowers the chance that an injection changes what the Planner proposes. It cannot remove it. The Gate limits what is allowed. It does not judge whether a proposal was a good idea.
 - **Allowed but unwise actions.** A payment that passes every rule in the mandate will run. The mandate is the user's risk setting.
-- **Loss of the consumer key** (T27) and **real-money use.** Everything here is for a testnet and a mock bank.
-- **The escrow contract.** It is not audited, and not yet built here (KR-1).
+- **Loss or theft of the consumer key** (T27, KR-7). The key sits unencrypted in the browser's IndexedDB. Everything here is for a testnet and a mock bank, not for real money.
+- **The escrow contract.** It is not audited and not deployed (KR-1, KR-17).
 - **The oracle and the registry.** They are simulated. We do not claim real-world attestation security.
 - **Privacy at the LLM provider** beyond tokenization (T6, KR-13, KR-14).
 - **Availability.** A kill switch, a stale rate or a failed adapter stops actions. We do not promise uptime.
@@ -256,8 +259,9 @@ The utility cost of the Gate (tasks lost to false blocks) will be reported next 
 
 1. Run the full suite with the local Supabase loaded and put the real counts in §3. Owner: R2.
 2. Fill §6 from the eval runner. Owner: R2.
-3. Add Foundry results, the three transaction hashes and the forced reverts. Owner: R3.
+3. Run `forge test` and record the pass count, deploy to Base Sepolia, and add the three transaction hashes and the forced reverts. Owner: R3.
 4. Decide KR-8 (narrow the read or change the sentence in `architecture.md` §16.3). Owner: R2 with R3.
-5. Derive tiers in code (KR-16) so the feed matches §2, and decide how CI runs the DB suites (KR-15). Owner: R2 with R3.
+5. Derive tiers in code (KR-16) so the feed matches §2, and decide how CI runs the DB, chain and Playwright suites (KR-15, KR-18). Owner: R2 with R3.
 6. Check the T0 and T1 wording against the PRD owner. Owner: R2.
-7. R1 and R3 read the sections on their modules. R5 edits the language.
+7. R3 and the second reviewer answer C1 to C9 (KR-19), and R2 fixes the stale `README.md:79` line (KR-17).
+8. R1 and R3 read the sections on their modules. R5 edits the language.
