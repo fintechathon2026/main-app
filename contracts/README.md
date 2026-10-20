@@ -36,6 +36,7 @@ anvil                                     # terminal 1
 The rehearsal uses anvil's public test keys. With local Supabase running, `scripts/chain-demo-setup.ts`
 then puts Lin's FitBox plan on the same anvil (see the header of that file for the env). On a
 restarted anvil the addresses repeat; the setup script clears stale local chain state (chain 31337 only).
+A rerun resumes Lin's existing active FitBox plan instead of buying a second one.
 
 ## Base Sepolia
 

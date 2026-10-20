@@ -4,6 +4,11 @@
 // removes the seeded mock plan and runs chain-sync once. After this, publishing an attestation
 // (POST /sim/registry/publish) and running cron/risk lets the agent exit on chain.
 //
+// Safe to rerun: it resumes the demo consumer's active FitBox plan (redeeming only the missing
+// sessions) instead of buying a second one. After each tx it waits for the RPC to show that tx's
+// state, since a load-balanced RPC (Base Sepolia via Alchemy) can answer from a node a block
+// behind. A contract revert prints its decoded custom error, e.g. "redeem reverted: WrongSession()".
+//
 //   set -a; . ./.env.local; set +a
 //   DEMO_CONSUMER_PRIVATE_KEY=0x... node --no-warnings --experimental-transform-types scripts/chain-demo-setup.ts
 //
