@@ -32,10 +32,17 @@ describe("describeAudit", () => {
   });
 
   it("links a real transaction and hides mock escrow ids", () => {
-    const real = describeAudit({ eventType: "execution.succeeded", event: { tool: "prepaid_exit", result: { txHash: "0xabc" } } });
-    expect(real.tx).toEqual({ hash: "0xabc", explorerUrl: "https://sepolia.basescan.org/tx/0xabc" });
+    const h = `0x${"ab".repeat(32)}`;
+    const real = describeAudit({ eventType: "execution.succeeded", event: { tool: "prepaid_exit", result: { txHash: h } } });
+    expect(real.tx).toEqual({ hash: h, explorerUrl: `https://sepolia.basescan.org/tx/${h}` });
     const mock = describeAudit({ eventType: "execution.succeeded", event: { tool: "prepaid_exit", result: { txHash: "mock:1" } } });
     expect(mock.tx).toBeUndefined();
+  });
+
+  it("gives no link for a malformed hash", () => {
+    for (const txHash of ["0xabc", `0x${"g".repeat(64)}`, `0x${"a".repeat(64)}/../x`, `https://evil.example/${"a".repeat(64)}`, 5, null]) {
+      expect(describeAudit({ eventType: "execution.succeeded", event: { tool: "pay_bill", result: { txHash } } }).tx, String(txHash)).toBeUndefined();
+    }
   });
 
   it("does not call a failed execution done", () => {

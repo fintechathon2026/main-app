@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { Origin } from "@/src/core/types";
 import type { FeedCheck, FeedItem, FeedWhyResponse, Money, UiStatus } from "../../api-types";
 import { toolLabel } from "./audit-view";
-import { chainTxRef } from "./db";
+import { txLink } from "./db";
 
 /** One `actions` row that reached a decision, with names looked up by id. */
 export type FeedActionRow = {
@@ -241,9 +241,9 @@ function originsOf(r: FeedActionRow, simulated: boolean): FeedItem["origins"] {
 
 function txOf(r: FeedActionRow): { tx?: FeedItem["tx"]; simulated: boolean } {
   const h = rec(r.result).txHash;
-  if (typeof h !== "string" || !h) return { simulated: false };
-  const ref = chainTxRef(h);
-  return ref.simulated ? { simulated: true } : { tx: { hash: ref.hash, explorerUrl: ref.explorerUrl }, simulated: false };
+  if (typeof h === "string" && h.startsWith("mock:")) return { simulated: true };
+  const tx = txLink(h);
+  return tx ? { tx, simulated: false } : { simulated: false };
 }
 
 export function toFeedItem(r: FeedActionRow): FeedItem | null {

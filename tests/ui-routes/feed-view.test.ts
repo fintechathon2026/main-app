@@ -44,6 +44,13 @@ describe("buildFeed", () => {
     expect(item.origins[0]).toMatchObject({ origin: "chain", simulated: true });
   });
 
+  it("gives no link for a malformed transaction hash", () => {
+    for (const txHash of ["0xabc", `0x${"z".repeat(64)}`, `${TX}/extra`, "javascript:alert(1)"]) {
+      const item = toFeedItem({ ...row("0006"), result: { txHash } })!;
+      expect(item.tx, txHash).toBeUndefined();
+    }
+  });
+
   it("never copies free text from args or results into a sentence", () => {
     const item = toFeedItem({
       ...row("0004"),

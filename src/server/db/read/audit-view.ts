@@ -4,7 +4,7 @@
 // the event body reaches the row (G6, G7). Unknown event types fall back to a neutral sentence.
 
 import type { AuditVerifyResponse, AuditVerifyRow, UiStatus } from "../../api-types";
-import { chainTxRef } from "./db";
+import { txLink } from "./db";
 
 /** Shape of one stored audit entry (same as the export entry, `createdAt` ISO). */
 export type AuditEntry = {
@@ -60,11 +60,8 @@ export function describeAudit(e: Pick<AuditEntry, "eventType" | "event">): Descr
         status: ok ? "done" : null,
         ruleIds: [],
       };
-      const txHash = rec(d.result).txHash;
-      if (typeof txHash === "string" && txHash && !txHash.startsWith("mock:")) {
-        const { hash, explorerUrl } = chainTxRef(txHash);
-        out.tx = { hash, explorerUrl };
-      }
+      const tx = txLink(rec(d.result).txHash);
+      if (tx) out.tx = tx;
       return out;
     }
     case "mandate.activated": {
