@@ -2,16 +2,17 @@
 
 // Evidence (docs/ui-direction.md §8): prove what happened. Desktop-first table; phones get a
 // simple list. Data: GET /api/audit/verify (newest page of the hash-chained audit log) and
-// GET /api/audit/export for the full record.
+// GET /api/audit/export for the full record; GET /api/audit/transactions for on-chain hashes.
 
 import { DownloadSimple, SealCheck, SealWarning } from "@phosphor-icons/react/dist/ssr";
 import { useApi } from "../data";
 import { dateTime, shortHash } from "../format";
 import { PageHeader } from "../components/page";
-import { ChainLink, StatusBadge } from "../components/primitives";
+import { ChainLink, SimulatedTag, StatusBadge } from "../components/primitives";
 import { ErrorState, SkeletonList } from "../components/states";
 import auditFixture from "@/fixtures/api/audit-verify.json";
 import type { AuditVerifyResponse, AuditVerifyRow } from "@/src/server/api-types";
+import type { ChainTxRow } from "@/src/server/platform/chain-transactions";
 
 const WHO: Record<AuditVerifyRow["actor"], string> = { agent: "Reins", user: "You", system: "Schedule" };
 
@@ -128,6 +129,61 @@ export function EvidenceScreen() {
         </ul>
         <p className="mt-4 text-center text-[13px] text-muted">Open on a larger screen for the full table.</p>
       </div>
+
+      <ChainTransactions />
     </>
+  );
+}
+
+const KIND_LABEL: Record<ChainTxRow["kind"], string> = {
+  purchase: "Package bought",
+  redeem: "Session used",
+  attested_exit: "Money back after an official notice",
+  voluntary_exit: "You left the package",
+  other: "Other",
+};
+
+/** On-chain transactions with Basescan links (execution evidence). Hidden when there are none. */
+function ChainTransactions() {
+  const txs = useApi<{ transactions: ChainTxRow[] }>("/api/audit/transactions");
+  if (txs.state !== "ready" || txs.data.transactions.length === 0) return null;
+  const rows = txs.data.transactions;
+  return (
+    <section aria-labelledby="chain-h" className="mt-8">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h2 id="chain-h" className="text-[17px] font-semibold">
+            On the blockchain
+          </h2>
+          <p className="text-[14px] text-muted">Every money movement of your prepaid packages, checkable by anyone on Basescan.</p>
+        </div>
+        <a
+          href="/api/audit/transactions?format=csv"
+          className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line px-4 text-[14px] font-semibold hover:bg-sunken"
+        >
+          <DownloadSimple size={18} aria-hidden />
+          CSV
+        </a>
+      </div>
+      <ul className="overflow-hidden rounded-card border border-line bg-surface">
+        {rows.map((t) => (
+          <li key={t.hash} className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 last:border-b-0">
+            <div className="min-w-0">
+              <p className="text-[15px] font-semibold">
+                {KIND_LABEL[t.kind]}
+                {t.sessionNo !== null && <span className="font-normal text-muted"> · session {t.sessionNo}</span>}
+              </p>
+              <p className="text-[13px] text-muted">
+                {t.chainPlanId ? `Plan ${t.chainPlanId}` : ""}
+                {t.sender ? ` · sent by ${t.sender === "agent" ? "Reins" : "relayer"}` : ""}
+                {t.at ? ` · ${dateTime(t.at)}` : ""}
+                {t.status === "reverted" ? " · reverted" : ""}
+              </p>
+            </div>
+            {t.explorerUrl ? <ChainLink hash={t.hash} url={t.explorerUrl} /> : <SimulatedTag />}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
