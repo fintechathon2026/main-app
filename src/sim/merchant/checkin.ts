@@ -31,7 +31,8 @@ export const readPlanFromMockbank: PlanReader = async (planId) => {
   const base = process.env.MOCKBANK_URL;
   const key = process.env.MOCKBANK_API_KEY;
   if (!base || !key) throw new CheckinError(503, "escrow_not_configured");
-  const res = await fetch(`${base.replace(/\/$/, "")}/escrow/plans/${encodeURIComponent(planId)}`, {
+  // MOCKBANK_URL is the app's base URL, like the settlement adapter reads it; the API is under /mockbank.
+  const res = await fetch(`${base.replace(/\/$/, "").replace(/\/mockbank$/, "")}/mockbank/escrow/plans/${encodeURIComponent(planId)}`, {
     headers: { "x-api-key": key },
     cache: "no-store",
   });
