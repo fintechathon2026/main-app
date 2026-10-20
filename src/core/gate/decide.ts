@@ -270,7 +270,10 @@ function caps(t: Trace, snap: GateSnapshot, policy: Policy, amountBase: number, 
   } else {
     t.add("global.daily_outflow_cap", "allow");
   }
-  const policyPayeeCap = payeeId ? policy.global.per_payee_daily_cap?.[payeeId] : undefined;
+  // Own keys only: `?.[payeeId]` would read inherited members ("constructor", "__proto__"),
+  // turn the cap into NaN via Math.min below and silently skip it.
+  const capMap = policy.global.per_payee_daily_cap;
+  const policyPayeeCap = payeeId && capMap && Object.hasOwn(capMap, payeeId) ? capMap[payeeId] : undefined;
   const payeeCaps = [policyPayeeCap, snap.caps.perPayeeCap].filter((c): c is number => c !== undefined);
   if (payeeCaps.length > 0) {
     const cap = Math.min(...payeeCaps);

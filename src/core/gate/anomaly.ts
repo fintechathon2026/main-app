@@ -38,7 +38,10 @@ export function medianMadCheck(x: number, history: readonly number[], k: number,
 /** Split-conformal check: auto-pay iff |x − m| ≤ q, q = ⌈(n+1)(1−α)⌉-th smallest score. */
 export function conformalCheck(x: number, history: readonly number[], alpha: number): AnomalyVerdict {
   const n = history.length;
-  const rank = Math.ceil((n + 1) * (1 - alpha));
+  // Fail closed on an invalid alpha: it must never turn into a "pass".
+  if (!Number.isFinite(alpha) || alpha <= 0 || alpha >= 1) return { anomalous: true, reason: "insufficient_history" };
+  // Same epsilon as src/core/detectors/anomaly.ts: (n+1)(1-alpha) can land just above an integer.
+  const rank = Math.ceil((n + 1) * (1 - alpha) - 1e-9);
   if (n === 0 || rank > n) return { anomalous: true, reason: "insufficient_history" };
   const m = median(history);
   const scores = history.map((h) => Math.abs(h - m)).sort((a, b) => a - b);
