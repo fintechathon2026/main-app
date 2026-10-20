@@ -49,6 +49,10 @@ describe.skipIf(!DB_ENABLED)("foundations: user-initiated prepaid actions", () =
   });
 
   afterAll(async () => {
+    // Offers and merchants are reference tables every user sees: remove what this file added.
+    await admin.query("delete from public.prepaid_plans where merchant_id = $1", [merchantId]);
+    await admin.query("delete from public.prepaid_offers where merchant_id = $1", [merchantId]);
+    await admin.query("delete from public.prepaid_merchants where id = $1", [merchantId]);
     await admin.end();
     await getPool().end();
     setPool(null);
