@@ -3,7 +3,7 @@
 // are thin wrappers around these.
 import { z } from "zod";
 import { simReadOk } from "../auth";
-import { CheckinError, readPlanFromMockbank, signCheckin, type PlanReader } from "./checkin";
+import { CheckinError, defaultPlanReader, signCheckin, type PlanReader } from "./checkin";
 import { MerchantKeyMissing } from "./keys";
 import { listOffers } from "./offers";
 
@@ -25,7 +25,7 @@ export async function handleOffers(req: Request): Promise<Response> {
 const CheckinBody = z.object({ planId: z.string().regex(/^\d{1,78}$/) }).strict();
 
 /** POST /sim/merchant/checkin {planId}: the gym's signature over Redeem for the next session. */
-export async function handleCheckin(req: Request, readPlan: PlanReader = readPlanFromMockbank): Promise<Response> {
+export async function handleCheckin(req: Request, readPlan: PlanReader = defaultPlanReader): Promise<Response> {
   if (!simReadOk(req)) return json({ error: "unauthorized" }, 401);
   let body: z.infer<typeof CheckinBody>;
   try {

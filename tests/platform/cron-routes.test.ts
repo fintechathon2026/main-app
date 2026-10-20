@@ -70,11 +70,11 @@ describe("/api/cron/chain-sync", () => {
     expect(await res.json()).toEqual({ ok: true, mode: "mock", skipped: true });
   });
 
-  it("answers 501 in chain mode", async () => {
+  it("answers 501 in chain mode when the chain env is incomplete", async () => {
     jobs.runChainSyncJob.mockRejectedValueOnce(new ChainSyncNotImplementedError());
     const res = await chainSync.POST(cronReq(`Bearer ${SECRET}`, "POST"));
     expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({ error: "chain_sync_not_implemented" });
+    expect(await res.json()).toEqual({ error: "chain_not_configured" });
   });
 
   it("maps any other failure to 500 without details", async () => {

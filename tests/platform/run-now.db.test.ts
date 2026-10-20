@@ -102,7 +102,7 @@ describe.skipIf(!DB_ENABLED)("platform: run-now and cron users against Postgres"
     expect(await jobRuns("cleanup", since)).toContainEqual({ status: "succeeded", stats_json: { users: 1, failed: 0 } });
   });
 
-  it("chain-sync records a skipped run in mock mode and refuses in chain mode", async () => {
+  it("chain-sync records a skipped run in mock mode and refuses chain mode without a chain env", async () => {
     const since = await dbNow();
     const ok = await chainSync.GET(new Request("http://localhost/api/cron/chain-sync", { headers: { authorization: `Bearer ${SECRET}` } }));
     expect(ok.status).toBe(200);
@@ -110,10 +110,11 @@ describe.skipIf(!DB_ENABLED)("platform: run-now and cron users against Postgres"
     expect(await jobRuns("chain-sync", since)).toContainEqual({ status: "succeeded", stats_json: { mode: "mock", skipped: true } });
 
     vi.stubEnv("REINS_ESCROW", "chain");
+    vi.stubEnv("ESCROW_ADDRESS", ""); // chain mode without a chain env: refuse, never a fake sync
     const before = (await jobRuns("chain-sync", since)).length;
     const no = await chainSync.POST(new Request("http://localhost/api/cron/chain-sync", { method: "POST", headers: { authorization: `Bearer ${SECRET}` } }));
     expect(no.status).toBe(501);
-    expect(await no.json()).toEqual({ error: "chain_sync_not_implemented" });
+    expect(await no.json()).toEqual({ error: "chain_not_configured" });
     expect(await jobRuns("chain-sync", since)).toHaveLength(before);
   });
 
