@@ -59,49 +59,80 @@ export async function main(): Promise<void> {
   const total = offer.unitPrice * BigInt(offer.units);
   console.log(`FitBox offer: ${offer.units} × ${offer.unitPrice} fen, merchant ${offer.merchant}`);
 
-  // 2. Load Lin's wallet (demo faucet).
-  const balance = await client.readContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "balanceOf", args: [consumer.address] });
-  if (balance < total) {
-    await send("mint", await minter.writeContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "mint", args: [consumer.address, total - balance] }));
-  }
-
-  // 3. Lin signs the purchase (agent = Reins) and the permit; the relayer submits.
   const domain = escrowDomain({ chainId: chain.chainId, escrowAddress: chain.escrowAddress });
-  const now = BigInt(Math.floor(Date.now() / 1000));
-  const auth = { offerHash: fitbox.offerHash, consumer: consumer.address, agent, deadline: now + BigInt(3600) };
-  const consumerSig = await consumer.signTypedData({ domain, types: PURCHASE_AUTH_TYPES, primaryType: "PurchaseAuth", message: auth });
-  const nonce = await client.readContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "nonces", args: [consumer.address] });
-  const permitSig = await consumer.signTypedData({
-    domain: tokenDomain({ chainId: chain.chainId, tokenAddress: chain.tokenAddress }),
-    types: PERMIT_TYPES,
-    primaryType: "Permit",
-    message: { owner: consumer.address, spender: chain.escrowAddress, value: total, nonce, deadline: now + BigInt(3600) },
-  });
-  const { r, s, v, yParity } = parseSignature(permitSig);
-  const permit = { value: total, deadline: now + BigInt(3600), v: Number(v ?? BigInt(yParity + 27)), r, s };
-  const purchase = await send(
-    "purchaseWithPermit",
-    await relayer.writeContract({
-      address: chain.escrowAddress,
-      abi: PREPAID_ESCROW_ABI,
-      functionName: "purchaseWithPermit",
-      args: [offer, fitbox.merchantSig, auth, consumerSig, permit],
-    }),
-  );
-  // The plan id comes from our own receipt: a `nextPlanId` read right after it can hit a
-  // load-balanced RPC node that has not seen the purchase block yet.
-  const purchased = parseEventLogs({ abi: PREPAID_ESCROW_ABI, logs: purchase.logs, eventName: "Purchased" }).find(
-    (l) => l.address.toLowerCase() === chain.escrowAddress.toLowerCase(),
-  );
-  if (!purchased) throw new Error(`purchaseWithPermit (${purchase.transactionHash}) emitted no Purchased event`);
-  const planId = purchased.args.planId;
+
+  // A rerun resumes Lin's active FitBox plan instead of buying (and indexing) a second one.
+  // The scan reads `latest`; a lagging RPC node could only miss a plan bought in the last block
+  // or two, which is fine for a dev script. On anvil, step 5's local cleanup still applies.
+  const findResumablePlan = async () => {
+    const next = await client.readContract({ address: chain.escrowAddress, abi: PREPAID_ESCROW_ABI, functionName: "nextPlanId" });
+    const same = (a: string | null, b: string) => a?.toLowerCase() === b.toLowerCase();
+    for (let id = next - BigInt(1); id >= BigInt(1); id--) {
+      const p = await readChainPlan(client, chain.escrowAddress, id);
+      if (
+        p &&
+        same(p.consumer, consumer.address) &&
+        same(p.merchant, offer.merchant) &&
+        same(p.agent, agent) &&
+        p.status === "active" &&
+        p.units === offer.units &&
+        p.redeemed <= SESSIONS_USED
+      ) {
+        return p;
+      }
+    }
+    return null;
+  };
+
+  const resumed = await findResumablePlan();
+  let planId: bigint;
+  if (resumed) {
+    console.log(`Resuming plan ${resumed.planId} (${resumed.redeemed}/${resumed.units} redeemed)`);
+    planId = resumed.planId;
+  } else {
+    // 2. Load Lin's wallet (demo faucet).
+    const balance = await client.readContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "balanceOf", args: [consumer.address] });
+    if (balance < total) {
+      await send("mint", await minter.writeContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "mint", args: [consumer.address, total - balance] }));
+    }
+
+    // 3. Lin signs the purchase (agent = Reins) and the permit; the relayer submits.
+    const now = BigInt(Math.floor(Date.now() / 1000));
+    const auth = { offerHash: fitbox.offerHash, consumer: consumer.address, agent, deadline: now + BigInt(3600) };
+    const consumerSig = await consumer.signTypedData({ domain, types: PURCHASE_AUTH_TYPES, primaryType: "PurchaseAuth", message: auth });
+    const nonce = await client.readContract({ address: chain.tokenAddress, abi: TEST_CNY_ABI, functionName: "nonces", args: [consumer.address] });
+    const permitSig = await consumer.signTypedData({
+      domain: tokenDomain({ chainId: chain.chainId, tokenAddress: chain.tokenAddress }),
+      types: PERMIT_TYPES,
+      primaryType: "Permit",
+      message: { owner: consumer.address, spender: chain.escrowAddress, value: total, nonce, deadline: now + BigInt(3600) },
+    });
+    const { r, s, v, yParity } = parseSignature(permitSig);
+    const permit = { value: total, deadline: now + BigInt(3600), v: Number(v ?? BigInt(yParity + 27)), r, s };
+    const purchase = await send(
+      "purchaseWithPermit",
+      await relayer.writeContract({
+        address: chain.escrowAddress,
+        abi: PREPAID_ESCROW_ABI,
+        functionName: "purchaseWithPermit",
+        args: [offer, fitbox.merchantSig, auth, consumerSig, permit],
+      }),
+    );
+    // The plan id comes from our own receipt: a `nextPlanId` read right after it can hit a
+    // load-balanced RPC node that has not seen the purchase block yet.
+    const purchased = parseEventLogs({ abi: PREPAID_ESCROW_ABI, logs: purchase.logs, eventName: "Purchased" }).find(
+      (l) => l.address.toLowerCase() === chain.escrowAddress.toLowerCase(),
+    );
+    if (!purchased) throw new Error(`purchaseWithPermit (${purchase.transactionHash}) emitted no Purchased event`);
+    planId = purchased.args.planId;
+  }
 
   // 4. Twelve check-ins: the gym tablet signs, Lin signs the same Redeem, the relayer submits.
   // signCheckin takes the session number from the chain (redeemed + 1). After each confirmed
   // redeem, a load-balanced RPC can still answer from a node a block behind, so the merchant would
   // sign the same session again and the contract would revert with WrongSession. Read-your-writes:
   // wait until the RPC shows at least the redeems this script has seen confirmed.
-  let expectedRedeemed = 0;
+  let expectedRedeemed = resumed ? resumed.redeemed : 0;
   const readPlan = async (id: bigint) => {
     const started = Date.now();
     for (;;) {
