@@ -9,7 +9,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { getMockbankPool, setMockbankPool } from "@/src/mockbank/db";
 import { verifyAuditChain } from "@/src/server/audit";
 import { getPool, setPool } from "@/src/server/db/pool";
-import { createExecutor } from "@/src/server/executor";
 import { DB_ENABLED, adminPool, createTestUser, inProcessTransport, type TestUser } from "./helpers";
 import { newParties, nowS, redeemBody, signPurchase, signVoluntaryExit, type Parties } from "./escrow";
 
