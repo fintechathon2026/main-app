@@ -43,7 +43,9 @@
 // (deny <= confirm), budgets.move_between_categories (deny <= confirm).
 //
 // A KNOWN GAP (reported, not fixed here): the PRD's "alpha >= narrows" is not sound against
-// decide() for small histories. See the finding in gate.property.test.ts.
+// decide() under method "conformal" for short histories: conformalCheck fails closed when
+// alpha < 1/(n+1), so a larger alpha can be MORE permissive. Pinned as FINDING 1 in
+// src/core/gate/gate.property.test.ts. narrows() follows the PRD until that is resolved.
 
 import type { Policy } from "./schema";
 
