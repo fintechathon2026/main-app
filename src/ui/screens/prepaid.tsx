@@ -103,8 +103,8 @@ export function PrepaidScreen() {
                         <Sessions used={p.unitsRedeemed} total={p.unitsTotal} />
                         <div className="mt-4 flex flex-wrap items-end justify-between gap-2">
                           <div>
-                            <p className="text-[13px] text-muted">Held safely until you use it</p>
-                            <Money value={p.balanceInEscrow} size="lg" decimals={false} />
+                            <p className="text-[13px] text-muted">{p.refund ? "Back with you, package closed" : "Held safely until you use it"}</p>
+                            <Money value={p.refund ?? p.balanceInEscrow} size="lg" decimals={false} />
                           </div>
                           <p className="amount text-[14px] text-muted">
                             {p.unitsRedeemed} of {p.unitsTotal} used
@@ -195,7 +195,7 @@ function PlanDetail({ plan, live, onDone }: { plan: PrepaidPlanItem; live: boole
     return (
       <div className="py-4 text-center" role="status">
         <CheckCircle size={40} weight="fill" className="mx-auto text-ok" aria-hidden />
-        <Money value={plan.balanceInEscrow} size="xl" className="mt-4 block" />
+        <Money value={plan.refund ?? plan.balanceInEscrow} size="xl" className="mt-4 block" />
         <p className="mt-2 text-[16px]">is back in your wallet.</p>
         <div className="mt-6 text-left">
           <Rows>
