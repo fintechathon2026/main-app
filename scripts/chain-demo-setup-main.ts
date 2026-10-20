@@ -11,7 +11,7 @@ import {
   parseEventLogs, parseSignature, type Address, type Hex, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { PREPAID_ESCROW_ABI, TEST_CNY_ABI } from "@/src/server/chain/abi";
-import { chainConfigFromEnv, chainFor, publicClientFor, readChainPlan } from "@/src/server/chain/client";
+import { chainConfigFromEnv, chainFor, chainSyncOptionsFromEnv, publicClientFor, readChainPlan } from "@/src/server/chain/client";
 import { PERMIT_TYPES, PURCHASE_AUTH_TYPES, REDEEM_TYPES, escrowDomain, tokenDomain } from "@/src/server/chain/eip712";
 import { runChainSync } from "@/src/server/chain/indexer";
 import { getPool } from "@/src/server/db/pool";
@@ -206,7 +206,7 @@ export async function main(): Promise<void> {
     client,
     escrow: chain.escrowAddress,
     userIds: [LIN],
-    startBlock: BigInt(process.env.CHAIN_START_BLOCK ?? "0"),
+    ...chainSyncOptionsFromEnv(chain),
     confirmations: 0,
   });
   await getPool().end();
