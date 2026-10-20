@@ -2,8 +2,8 @@
 
 // Prepaid (docs/ui-direction.md §8): my packages and the money still held.
 // Data: GET /api/prepaid/plans, /api/prepaid/offers, /api/prepaid/offers/:id/advice.
-// Buying, check-in and leaving need browser signing (viem, R4-08/09); until that lands the
-// buttons are shown disabled with the reason, never faked.
+// Buying, check-in and leaving sign in this browser with the consumer key (src/ui/prepaid) and run
+// through the executor via /api/prepaid/*. Sample data (no session) keeps the buttons off.
 
 import { CheckCircle, Warning } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
@@ -22,9 +22,10 @@ import { useApi, useNow } from "../data";
 import { dateTime, dayMonth } from "../format";
 import { MasterDetail, useIsDesktop } from "../components/master-detail";
 import { PageHeader } from "../components/page";
-import { AgentNote, Button, ChainLink, Money, Row, Rows, SimulatedTag, Tag } from "../components/primitives";
+import { AgentNote, ChainLink, Money, Row, Rows, SimulatedTag, Tag } from "../components/primitives";
 import { EmptyState, ErrorState, SkeletonList } from "../components/states";
 import { ORIGIN_LABEL } from "../words";
+import { BuyButton, KeyBackup, PlanActions } from "../prepaid/actions";
 
 type Sel = { kind: "plan"; id: string } | { kind: "offer"; id: string } | null;
 
@@ -67,7 +68,13 @@ export function PrepaidScreen() {
         detailKey={selected ? `${selected.kind}-${selected.id}` : "none"}
         detailLabel={plan ? "Package details" : "Offer details"}
         onClose={() => setPicked(null)}
-        detail={plan ? <PlanDetail plan={plan} /> : offer ? <OfferDetail offer={offer} /> : null}
+        detail={
+          plan ? (
+            <PlanDetail plan={plan} live={!plans.sample} onDone={plans.reload} />
+          ) : offer ? (
+            <OfferDetail offer={offer} live={offers.state === "ready" && !offers.sample} onDone={plans.reload} />
+          ) : null
+        }
         list={
           <div>
             {planList.length === 0 ? (
@@ -180,7 +187,7 @@ function Signals({ signals }: { signals: PrepaidSignal[] }) {
   );
 }
 
-function PlanDetail({ plan }: { plan: PrepaidPlanItem }) {
+function PlanDetail({ plan, live, onDone }: { plan: PrepaidPlanItem; live: boolean; onDone: () => void }) {
   const fee = plan.cancelFeeBps / 100;
   const used = plan.unitsRedeemed * plan.unitPrice.amount;
 
@@ -262,20 +269,21 @@ function PlanDetail({ plan }: { plan: PrepaidPlanItem }) {
         </>
       )}
 
-      <div className="mt-6 flex flex-col gap-2">
-        <Button full disabled>
-          Check in at the gym
-        </Button>
-        <Button full variant="quiet" disabled>
-          Leave this package
-        </Button>
-        <p className="text-center text-[13px] text-muted">Check-in and leaving need signing in this browser, which is not set up yet.</p>
+      <div className="mt-6">
+        {live ? (
+          <div className="space-y-4">
+            <PlanActions plan={plan} onDone={onDone} />
+            <KeyBackup />
+          </div>
+        ) : (
+          <p className="text-center text-[13px] text-muted">Sign in to check in or leave. This is sample data.</p>
+        )}
       </div>
     </div>
   );
 }
 
-function OfferDetail({ offer }: { offer: PrepaidOfferItem }) {
+function OfferDetail({ offer, live, onDone }: { offer: PrepaidOfferItem; live: boolean; onDone: () => void }) {
   const advice = useApi<PrepaidAdviceResponse>(
     `/api/prepaid/offers/${offer.id}/advice`,
     adviceFixture.offerId === offer.id ? (adviceFixture as PrepaidAdviceResponse) : undefined,
@@ -320,10 +328,12 @@ function OfferDetail({ offer }: { offer: PrepaidOfferItem }) {
       </div>
 
       <div className="mt-6">
-        <Button full disabled>
-          {offer.merchant.escrowSupported ? "Buy with money held safely" : "Buy"}
-        </Button>
-        <p className="mt-2 text-center text-[13px] text-muted">Only you can buy a package. Buying needs signing in this browser, which is not set up yet.</p>
+        {live ? (
+          <BuyButton offer={offer} onDone={onDone} />
+        ) : (
+          <p className="text-center text-[13px] text-muted">Sign in to buy. This is sample data.</p>
+        )}
+        <p className="mt-2 text-center text-[13px] text-muted">Only you can buy a package. Reins never buys on its own.</p>
       </div>
     </div>
   );

@@ -8,6 +8,8 @@ import { CheckCircle } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
 import type { ApprovalCard, DecisionResponse } from "@/app/api/approvals/_lib/cards";
 import { postJson } from "../data";
+import { consumerAccount } from "../prepaid/consumer-key";
+import { signVoluntaryExit, type SigningConfig } from "../prepaid/sign";
 import { dayMonth, expiresIn, formatMoney, shortHash } from "../format";
 import { Button, Money, Row, Rows, StatusBadge } from "../components/primitives";
 import { SourceInfo } from "../components/source";
@@ -33,6 +35,22 @@ export function approvalHeadline(card: ApprovalCard): string {
   return card.title;
 }
 
+async function signExitForCard(card: ApprovalCard): Promise<{ ok: true } | { ok: false; text: string }> {
+  try {
+    const account = await consumerAccount();
+    if (!account) return { ok: false, text: "This browser does not hold your signing key. Restore your key backup first. Nothing changed." };
+    const cfg = (await fetch("/api/prepaid/signing", { cache: "no-store" }).then((r) => r.json())) as SigningConfig;
+    const plans = (await fetch("/api/prepaid/plans", { cache: "no-store" }).then((r) => r.json())) as { plans: { id: string; chainPlanId: string }[] };
+    const plan = plans.plans.find((p) => card.subject?.kind === "prepaid_plan" && p.id === card.subject.id);
+    if (!plan) return { ok: false, text: "That package was not found. Nothing changed." };
+    const sig = await signVoluntaryExit(account, cfg, plan.chainPlanId);
+    const r = await postJson(`/api/prepaid/exit-signature/${card.actionId}`, sig);
+    return r.ok ? { ok: true } : { ok: false, text: "Your signature to leave was not accepted. Nothing changed." };
+  } catch {
+    return { ok: false, text: "Signing failed in this browser. Nothing changed." };
+  }
+}
+
 export function ApprovalDetail({ card, now }: { card: ApprovalCard; now: Date }) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>(null);
@@ -40,6 +58,15 @@ export function ApprovalDetail({ card, now }: { card: ApprovalCard; now: Date })
 
   async function decide(decision: "approve" | "reject") {
     setBusy(true);
+    // A prepaid exit without an official notice is a fee-bearing voluntary exit: the owner signs
+    // VoluntaryExit in this browser first, then the one OK confirms it (Gate prepaid.exit_needs_confirm).
+    if (decision === "approve" && card.tool === "prepaid_exit" && !card.attestation && card.subject?.kind === "prepaid_plan") {
+      const signed = await signExitForCard(card);
+      if (!signed.ok) {
+        setBusy(false);
+        return setOutcome({ kind: "error", text: signed.text });
+      }
+    }
     const r = await postJson<DecisionResponse>(`/api/approvals/${card.id}`, { decision });
     setBusy(false);
     if (r.ok) return setOutcome({ kind: r.data.status === "approved" ? "approved" : "rejected" });
