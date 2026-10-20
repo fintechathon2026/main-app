@@ -31,5 +31,13 @@ export async function resolve(spec, ctx, next) {
 }`;
 register("data:text/javascript," + encodeURIComponent(hooks), import.meta.url);
 
-const { main } = await import("./chain-demo-setup-main");
-await main();
+const { main, revertReason } = await import("./chain-demo-setup-main");
+try {
+  await main();
+} catch (err) {
+  // Put the decoded custom error (e.g. "redeem reverted: WrongSession()") above viem's long dump.
+  const reason = revertReason(err);
+  if (reason) console.error(`\n${reason}\n`);
+  console.error(err);
+  process.exit(1);
+}

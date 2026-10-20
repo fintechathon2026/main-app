@@ -2,7 +2,13 @@
 // "@/" import is evaluated). See that file for usage.
 
 import { Pool } from "pg";
-import { createWalletClient, http, parseEventLogs, parseSignature, type Address, type Hex, type TransactionReceipt } from "viem";
+import {
+  BaseError,
+  ContractFunctionExecutionError,
+  ContractFunctionRevertedError,
+  createWalletClient,
+  http,
+  parseEventLogs, parseSignature, type Address, type Hex, type TransactionReceipt } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { PREPAID_ESCROW_ABI, TEST_CNY_ABI } from "@/src/server/chain/abi";
 import { chainConfigFromEnv, chainFor, publicClientFor, readChainPlan } from "@/src/server/chain/client";
@@ -18,6 +24,17 @@ const RPC_POLL_MS = 1_000;
 const RPC_CATCH_UP_MS = 30_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** "redeem reverted: WrongSession()" for a contract revert viem decoded against the ABI; else null. */
+export function revertReason(err: unknown): string | null {
+  if (!(err instanceof BaseError)) return null;
+  const rev = err.walk((e) => e instanceof ContractFunctionRevertedError);
+  if (!(rev instanceof ContractFunctionRevertedError)) return null;
+  const fn = err instanceof ContractFunctionExecutionError ? err.functionName : "contract call";
+  const name = rev.data?.errorName ?? rev.reason ?? rev.signature ?? "unknown error";
+  const args = rev.data?.args?.map(String).join(", ") ?? "";
+  return `${fn} reverted: ${name}${rev.data ? `(${args})` : ""}`;
+}
 
 function key(name: string): Hex {
   const v = process.env[name]?.trim();
