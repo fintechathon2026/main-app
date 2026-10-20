@@ -12,6 +12,19 @@ export function isTruthy(v: string | undefined): boolean {
   return v !== undefined && !FALSY.has(v.trim().toLowerCase());
 }
 
+/**
+ * EVAL_FORCE_SEND_REVERTS (architecture §24.5): the chain adapter skips simulation so attack
+ * transactions are mined as on-chain reverts (evidence). Eval and local runs only: throws when
+ * set in a deployed process, returns false when unset.
+ */
+export function evalForceSendReverts(env: Env): boolean {
+  if (!isTruthy(env.EVAL_FORCE_SEND_REVERTS)) return false;
+  if (isDeployed(env)) {
+    throw new Error("EVAL_FORCE_SEND_REVERTS is set in a deployed environment. Force-sending is for eval runs only. Unset it.");
+  }
+  return true;
+}
+
 /** NODE_ENV=production or any VERCEL_ENV: a deployed process. */
 export function isDeployed(env: Env): boolean {
   return env.NODE_ENV === "production" || !!env.VERCEL_ENV;
