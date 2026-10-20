@@ -3,7 +3,6 @@
 // and app/api/admin/run-now (signed-in admin), so both paths run exactly the same code and write
 // the same job_runs rows.
 
-import { isUuid } from "../auth/session";
 import { getPool } from "../db/pool";
 import { type DetectResult, pgDetectTx, runDetectForUser } from "../db/read/detect-job";
 import { recordJobRun } from "../db/read/detect-store";
@@ -13,18 +12,7 @@ import { closeExpiredPausedPlans } from "../plans/expiry";
 import { defaultRiskJobDeps, runRiskJobRecorded, type RiskJobStats } from "../risk";
 
 export { runChainSyncJob, ChainSyncNotImplementedError, type ChainSyncStats } from "./chain-sync";
-
-/**
- * Users a per-user job runs for. An explicit env list wins (demo config, tests); otherwise
- * public.cron_user_ids() (users with an active mandate; a security-definer function, because
- * reins_server cannot list users across RLS). Every per-user step still runs in withUserTx.
- */
-export async function cronUserIds(envVar = "REINS_CRON_USER_IDS"): Promise<string[]> {
-  const raw = (process.env[envVar] ?? "").trim();
-  if (raw) return raw.split(",").map((s) => s.trim()).filter(isUuid);
-  const r = await getPool().query<{ id: string }>("select id::text as id from public.cron_user_ids() as id");
-  return r.rows.map((x) => x.id);
-}
+export { cronUserIds } from "./users";
 
 export async function runFxJob() {
   return recordJobRun(getPool(), "fx", () => syncFxRates({ now: new Date().toISOString() }), (r) => ({ stored: r.length }));
