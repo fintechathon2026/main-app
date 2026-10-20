@@ -76,8 +76,8 @@ We want you to know exactly what you are looking at.
 | AI agent (reader, planner, explainer) | Built; the demo can replay recorded model answers (`REINS_MODELS=recorded`), so it runs without an API key |
 | Bank | **Simulated** (`/mockbank`), a separate service with its own database role |
 | Merchant and official-notice registry | **Simulated** (`src/sim/`), each signs with its own key |
-| Prepaid escrow | **Mocked** (`REINS_ESCROW=mock`). The Solidity contract on Base Sepolia (test token, no value) is **not built yet** |
-| Buying, check-in and leaving early from the browser | Not built yet; the buttons are shown disabled with the reason |
+| Prepaid escrow | **Mocked by default** (`REINS_ESCROW=mock`). The Solidity contract (`contracts/`) and the chain adapter (`REINS_ESCROW=chain`) are built and tested with Foundry and a local chain. They are **not deployed to Base Sepolia yet** (test token, no value) |
+| Buying, check-in and leaving early from the browser | Built. The browser makes the key and signs; the server never sees it. Works on the mock escrow; the simulated gym tablet is at `/sim/tablet` |
 | Passkey signing of the mandate | Not built yet; today the stored mandate is checked by its hash |
 | Attack results with and without the rule check | Cases are in `evals/`; the numbers are still being produced |
 
