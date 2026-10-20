@@ -4,7 +4,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { getPool, setPool } from "@/src/server/db/pool";
 import { getMockbankPool, setMockbankPool } from "@/src/mockbank/db";
 import { createExecutor } from "@/src/server/executor";
@@ -12,6 +12,28 @@ import { PgPlanStore } from "@/src/server/plan-store";
 import { decideApproval } from "@/src/server/approvals";
 import { verifyAuditChain } from "@/src/server/audit";
 import { DB_ENABLED, adminPool, createTestUser, inProcessTransport, planPayments } from "./helpers";
+
+describe("eval arm A switch (I-04)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("evalDisableGate without REINS_EVAL_DISABLE_GATE throws", () => {
+    vi.stubEnv("REINS_EVAL_DISABLE_GATE", "");
+    expect(() => createExecutor({ transport: inProcessTransport, evalDisableGate: true })).toThrow(/REINS_EVAL_DISABLE_GATE/);
+  });
+
+  it("refuses to build any executor with the flag in production, with or without the option", () => {
+    vi.stubEnv("REINS_EVAL_DISABLE_GATE", "1");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => createExecutor({ transport: inProcessTransport, evalDisableGate: true })).toThrow(/deployed environment/);
+    expect(() => createExecutor({ transport: inProcessTransport })).toThrow(/deployed environment/);
+  });
+
+  it("refuses the flag on Vercel", () => {
+    vi.stubEnv("REINS_EVAL_DISABLE_GATE", "1");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    expect(() => createExecutor({ transport: inProcessTransport, evalDisableGate: true })).toThrow(/VERCEL_ENV=preview/);
+  });
+});
 
 describe.skipIf(!DB_ENABLED)("foundations: executor against Postgres + mock bank", () => {
   let admin: Pool;
@@ -166,6 +188,31 @@ describe.skipIf(!DB_ENABLED)("foundations: executor against Postgres + mock bank
     const r = await executor.run(ids[0], u.id);
     expect(r.status).toBe("denied");
     expect(r.gate?.ruleIds).toEqual(["global.kill_switch"]);
+  });
+
+  it("eval arm A: with the flag in a test process, a payment the Gate denies executes and is audited", async () => {
+    const u = await createTestUser(admin, [{ biller: "LANDLORD_WANG", amount: 4500, key: "rent" }]);
+    const { ids } = await planPayments(store, u.id, [{ billId: u.bills.rent, billerId: "LANDLORD_WANG", amount: 4500 }]);
+    // Arm B: over the daily cap, denied.
+    const other = await planPayments(store, u.id, [{ billId: u.bills.rent, billerId: "LANDLORD_WANG", amount: 4500 }]);
+    expect((await executor.run(other.ids[0], u.id)).gate?.ruleIds).toContain("global.daily_outflow_cap");
+
+    vi.stubEnv("REINS_EVAL_DISABLE_GATE", "1");
+    let armA;
+    try {
+      armA = createExecutor({ transport: inProcessTransport, evalDisableGate: true });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const r = await armA.run(ids[0], u.id);
+    expect(r.status).toBe("succeeded");
+    expect(r.gate?.ruleIds).toEqual(["eval.gate_disabled"]);
+    expect(await payments(u.bills.rent)).toHaveLength(1);
+    const ev = await admin.query(
+      "select event_json from public.audit_log where user_id = $1 and event_type = 'executor.eval_gate_disabled'",
+      [u.id],
+    );
+    expect(ev.rows.map((x) => x.event_json.actionId)).toEqual([ids[0]]);
   });
 
   it("refuses an action whose stored args no longer match its hash", async () => {

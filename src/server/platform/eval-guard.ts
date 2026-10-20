@@ -1,14 +1,28 @@
 // I-04 (task.md, architecture §16.3): the eval-only switch that turns the Policy Gate off
 // (`REINS_EVAL_DISABLE_GATE`, arm A of the experiment) must never be honoured in production.
-// This module only refuses to start; the switch itself is not implemented anywhere.
+// The switch itself is the executor option `evalDisableGate` (src/server/executor/run.ts),
+// honoured only when `evalGateDisabledAllowed(process.env)` is true.
 
 type Env = Readonly<Record<string, string | undefined>>;
 
 const FALSY = new Set(["", "0", "false", "no", "off"]);
 
 /** Any value other than empty / 0 / false / no / off counts as set (fail closed on odd values). */
-function isTruthy(v: string | undefined): boolean {
+export function isTruthy(v: string | undefined): boolean {
   return v !== undefined && !FALSY.has(v.trim().toLowerCase());
+}
+
+/** NODE_ENV=production or any VERCEL_ENV: a deployed process. */
+export function isDeployed(env: Env): boolean {
+  return env.NODE_ENV === "production" || !!env.VERCEL_ENV;
+}
+
+/**
+ * True only when REINS_EVAL_DISABLE_GATE is set and the process is not deployed. The executor
+ * refuses `evalDisableGate` unless this holds, so no argument alone can turn the Gate off.
+ */
+export function evalGateDisabledAllowed(env: Env): boolean {
+  return isTruthy(env.REINS_EVAL_DISABLE_GATE) && !isDeployed(env);
 }
 
 /**
@@ -18,8 +32,7 @@ function isTruthy(v: string | undefined): boolean {
 export function assertGateNotDisabled(env: Env): void {
   if (!isTruthy(env.REINS_EVAL_DISABLE_GATE)) return;
   const prod = env.NODE_ENV === "production";
-  const vercel = !!env.VERCEL_ENV;
-  if (prod || vercel) {
+  if (isDeployed(env)) {
     throw new Error(
       `REINS_EVAL_DISABLE_GATE is set in a deployed environment (${prod ? "NODE_ENV=production" : `VERCEL_ENV=${env.VERCEL_ENV}`}). ` +
         "The Policy Gate cannot be disabled outside eval builds (G1, I-04). Unset it.",
