@@ -354,7 +354,9 @@ function prepaidRedeem(t: Trace, snap: GateSnapshot, policy: Policy, sessionNo: 
   const allOk =
     ok &&
     sessionNo === plan.nextSession &&
-    (f.sessionNo === undefined || f.sessionNo === sessionNo) &&
+    // Fail closed: the signed session number must be present and agree with the argument.
+    f.sessionNo !== undefined &&
+    f.sessionNo === sessionNo &&
     f.consumerSigValid === true &&
     f.merchantSigValid === true;
   t.add("prepaid.redeem", allOk ? "allow" : "deny", allOk ? undefined : "prepaid.redeem_invalid");
