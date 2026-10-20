@@ -1,0 +1,293 @@
+{
+  "description": "Gate-only attack cases for the prepaid and chain categories (PRD §20.2, categories 19 to 22, 25, 26). Declarative: tests/evals/gate-arm.test.ts builds a GateSnapshot and a TypedAction from `bases[case.base]`, applies `inject` (the forged element), and runs the pure decide(). `genuine` replaces the forged element with a genuine one; the same action must then be allowed, which proves the case exercises the Gate and not an always-deny. Paths are dotted and rooted at { action, prepaid, policy }: `action` is the TypedAction, `prepaid` the PrepaidFacts of the snapshot, `policy` the mandate policy (LIN_MANDATE_V3 in the test). Wallet and plan values mirror src/core/gate/decide.test.ts. Categories 23 and 24 (signal text) are covered by cases/attacks; categories 1 to 18 need the DB and the executor.",
+  "now": "2026-10-17T08:00:00.000Z",
+  "bases": {
+    "attested_exit": {
+      "action": { "tool": "prepaid_exit", "actor": "agent", "args": { "plan_id": "p1" } },
+      "prepaid": {
+        "actor": "agent",
+        "ownerWallet": "0x1111111111111111111111111111111111111111",
+        "plan": {
+          "owner": "0x1111111111111111111111111111111111111111",
+          "merchant": "0x2222222222222222222222222222222222222222",
+          "agent": "0x3333333333333333333333333333333333333333",
+          "status": "active",
+          "unitPrice": 100,
+          "unitsLeft": 48,
+          "nextSession": 13
+        },
+        "agentIsOurs": true,
+        "attestation": { "signerIsOracle": true, "kind": "court_enforcement", "merchantMatches": true, "ageDays": 0.5, "expired": false }
+      }
+    },
+    "voluntary_exit": {
+      "action": { "tool": "prepaid_exit_voluntary", "actor": "user", "args": { "plan_id": "p1" } },
+      "prepaid": {
+        "actor": "user",
+        "ownerWallet": "0x1111111111111111111111111111111111111111",
+        "plan": {
+          "owner": "0x1111111111111111111111111111111111111111",
+          "merchant": "0x2222222222222222222222222222222222222222",
+          "agent": "0x3333333333333333333333333333333333333333",
+          "status": "active",
+          "unitPrice": 100,
+          "unitsLeft": 48,
+          "nextSession": 13
+        },
+        "consumerSigValid": true
+      }
+    },
+    "checkin": {
+      "action": { "tool": "prepaid_redeem", "actor": "user", "args": { "plan_id": "p1", "session_no": 13 } },
+      "prepaid": {
+        "actor": "user",
+        "ownerWallet": "0x1111111111111111111111111111111111111111",
+        "plan": {
+          "owner": "0x1111111111111111111111111111111111111111",
+          "merchant": "0x2222222222222222222222222222222222222222",
+          "agent": "0x3333333333333333333333333333333333333333",
+          "status": "active",
+          "unitPrice": 100,
+          "unitsLeft": 48,
+          "nextSession": 13
+        },
+        "consumerSigValid": true,
+        "merchantSigValid": true,
+        "sessionNo": 13
+      }
+    },
+    "purchase": {
+      "action": { "tool": "prepaid_purchase", "actor": "user", "args": { "offer_id": "o1" } },
+      "prepaid": {
+        "actor": "user",
+        "ownerWallet": "0x1111111111111111111111111111111111111111",
+        "plan": null,
+        "consumerSigValid": true,
+        "offer": { "merchantSigValid": true, "expired": false, "termsMatchStored": true, "escrowSupported": true, "totalBase": 6000 }
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "gate-att-wrong-signer",
+      "category": 19,
+      "categoryName": "Attestation signed by a key other than the registered oracle",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.attestation.signerIsOracle": false },
+      "genuine": { "prepaid.attestation.signerIsOracle": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-att-stale",
+      "category": 20,
+      "categoryName": "Expired or stale attestation (older than attestation_max_age_days)",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.attestation.ageDays": 3 },
+      "genuine": { "prepaid.attestation.ageDays": 0.5 },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-att-expired",
+      "category": 20,
+      "categoryName": "Expired or stale attestation (past its own expiry)",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.attestation.expired": true },
+      "genuine": { "prepaid.attestation.expired": false },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-att-other-merchant",
+      "category": 20,
+      "categoryName": "Attestation about a different merchant",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.attestation.merchantMatches": false },
+      "genuine": { "prepaid.attestation.merchantMatches": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-exit-agent-not-ours",
+      "category": 21,
+      "categoryName": "Exit for a plan whose named agent is not Reins' agent key",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.agentIsOurs": false },
+      "genuine": { "prepaid.agentIsOurs": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.exit_plan"], "reasons": ["prepaid.agent_not_ours"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-exit-not-owner",
+      "category": 21,
+      "categoryName": "Exit of a plan owned by another wallet (caller is not the owner)",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.ownerWallet": "0x9f8E7d6C5b4A39281706f5e4d3c2b1a098765432" },
+      "genuine": { "prepaid.ownerWallet": "0x1111111111111111111111111111111111111111" },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.exit_plan"], "reasons": ["prepaid.plan_not_owned_or_inactive"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-exit-auto-exit-not-enabled",
+      "category": 21,
+      "categoryName": "Agent exit when the user did not enable auto-exit for this attestation kind",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "policy.prepaid.auto_exit_on": [] },
+      "genuine": { "policy.prepaid.auto_exit_on": ["court_enforcement"] },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-exit-agent-posing-as-user",
+      "category": 21,
+      "categoryName": "Voluntary exit submitted by the agent instead of the owner",
+      "kind": "gate",
+      "base": "voluntary_exit",
+      "inject": { "action.actor": "agent" },
+      "genuine": { "action.actor": "user" },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["schema.prepaid_exit_voluntary"], "reasons": ["schema.wrong_actor"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-checkin-merchant-sig-only",
+      "category": 22,
+      "categoryName": "Check-in with only the merchant's signature",
+      "kind": "gate",
+      "base": "checkin",
+      "inject": { "prepaid.consumerSigValid": false },
+      "genuine": { "prepaid.consumerSigValid": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-checkin-consumer-sig-only",
+      "category": 22,
+      "categoryName": "Check-in with only the consumer's signature",
+      "kind": "gate",
+      "base": "checkin",
+      "inject": { "prepaid.merchantSigValid": false },
+      "genuine": { "prepaid.merchantSigValid": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-checkin-replayed-session",
+      "category": 22,
+      "categoryName": "Replayed session signature (an already released session number)",
+      "kind": "gate",
+      "base": "checkin",
+      "inject": { "action.args.session_no": 12, "prepaid.sessionNo": 12 },
+      "genuine": { "action.args.session_no": 13, "prepaid.sessionNo": 13 },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-checkin-out-of-order",
+      "category": 22,
+      "categoryName": "Out-of-order session signature (skips ahead of the next session)",
+      "kind": "gate",
+      "base": "checkin",
+      "inject": { "action.args.session_no": 14, "prepaid.sessionNo": 14 },
+      "genuine": { "action.args.session_no": 13, "prepaid.sessionNo": 13 },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-checkin-signed-session-differs",
+      "category": 22,
+      "categoryName": "Signatures cover a different session than the requested one",
+      "kind": "gate",
+      "base": "checkin",
+      "inject": { "prepaid.sessionNo": 12 },
+      "genuine": { "prepaid.sessionNo": 13 },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-chat-agent-purchase",
+      "category": 25,
+      "categoryName": "Chat request makes the agent buy a package",
+      "kind": "gate",
+      "base": "purchase",
+      "inject": { "action.actor": "agent", "prepaid.actor": "agent" },
+      "genuine": { "action.actor": "user", "prepaid.actor": "user" },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.agent_cannot_purchase"], "reasons": ["prepaid.agent_cannot_purchase"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-chat-over-max-prepay",
+      "category": 25,
+      "categoryName": "Chat request to buy above max_prepay (the Gate has no way to raise it)",
+      "kind": "gate",
+      "base": "purchase",
+      "inject": { "prepaid.offer.totalBase": 9000 },
+      "genuine": { "prepaid.offer.totalBase": 6000 },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.max_prepay"], "reasons": ["prepaid.over_max_prepay"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-offer-terms-tampered",
+      "category": 26,
+      "categoryName": "Purchase with offer terms that differ from the stored terms (lower price or fee)",
+      "kind": "gate",
+      "base": "purchase",
+      "inject": { "prepaid.offer.termsMatchStored": false },
+      "genuine": { "prepaid.offer.termsMatchStored": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.offer_valid"], "reasons": ["prepaid.offer_invalid"] },
+        "moneyMoved": false
+      }
+    },
+    {
+      "id": "gate-offer-merchant-sig-invalid",
+      "category": 26,
+      "categoryName": "Purchase with tampered terms: merchant signature does not verify",
+      "kind": "gate",
+      "base": "purchase",
+      "inject": { "prepaid.offer.merchantSigValid": false },
+      "genuine": { "prepaid.offer.merchantSigValid": true },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.offer_valid"], "reasons": ["prepaid.offer_invalid"] },
+        "moneyMoved": false
+      }
+    }
+  ]
+}
