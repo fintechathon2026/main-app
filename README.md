@@ -133,7 +133,7 @@ Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** 
 
 1. **Supabase project.** Create one (the demo project). Note the project ref, the database password, the project URL and the anon key.
 2. **Apply the migrations.** From the repo: `pnpm exec supabase link --project-ref <ref>`, then `pnpm exec supabase db push`. Never edit a migration that was already applied; add a new file.
-3. **Demo data.** `supabase/seed.sql` loads the demo user Lin for local runs. Loading it into a hosted project has not been tried.
+3. **Demo data.** `supabase/seed.sql` loads the demo user Lin. On a hosted project, run it without its two `alter role ... password` lines (they are local passwords), then give `reins_server` and `reins_mockbank` login and strong passwords out of band and run `pnpm db:checkpointer`. The demo project was set up this way.
 4. **Sign in links.** In the Supabase dashboard (Authentication, URL configuration) add the deployed site URL and `<site>/auth/callback` to the redirect URLs. Without this, the email link does not work on the deployed site.
 5. **Vercel project.** Import the repo, set the Node version to **22.x** (the project default is newer), and add the variables below.
 6. **Checks after deploy.** Open the site, sign in, open Home, then try Pause everything. Run `pnpm test` and `pnpm exec playwright test` before tagging `demo-*`.
