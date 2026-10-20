@@ -8,7 +8,14 @@ import * as S from "./api-schemas";
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
 
-const repo = vi.hoisted(() => ({ loadAuditVerify: vi.fn(), loadFeed: vi.fn(), loadWhy: vi.fn() }));
+const repo = vi.hoisted(() => ({
+  loadAuditVerify: vi.fn(),
+  loadFeed: vi.fn(),
+  loadWhy: vi.fn(),
+  loadActiveMandate: vi.fn(),
+  loadMandateHistory: vi.fn(),
+}));
+vi.mock("@/src/server/db/read/mandate-repo", () => ({ loadActiveMandate: repo.loadActiveMandate, loadMandateHistory: repo.loadMandateHistory }));
 vi.mock("@/src/server/db/read/audit-repo", () => ({ loadAuditVerify: repo.loadAuditVerify }));
 vi.mock("@/src/server/db/read/feed-repo", () => ({ loadFeed: repo.loadFeed, loadWhy: repo.loadWhy }));
 
@@ -124,5 +131,53 @@ describe("GET /api/feed/:id/why", () => {
     vi.stubEnv("REINS_FIXTURES", "");
     const { GET } = await import("@/app/api/feed/[id]/why/route");
     expect((await GET(get(`/api/feed/${ID}/why`), ctx(ID))).status).toBe(401);
+  });
+});
+
+describe("GET /api/mandates/active and /history", () => {
+  it("serve the fixtures with no session and no database", async () => {
+    const active = await import("@/app/api/mandates/active/route");
+    const history = await import("@/app/api/mandates/history/route");
+    const a = S.MandateActiveResponse.parse(await (await active.GET(get("/api/mandates/active"))).json());
+    expect(a.version).toBe(3);
+    const h = S.MandateHistoryResponse.parse(await (await history.GET(get("/api/mandates/history"))).json());
+    expect(h.map((v) => v.version)).toEqual([3, 2, 1]);
+    expect(repo.loadActiveMandate).not.toHaveBeenCalled();
+    expect(repo.loadMandateHistory).not.toHaveBeenCalled();
+  });
+
+  it("are 401 without a session when fixtures are off", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    const active = await import("@/app/api/mandates/active/route");
+    const history = await import("@/app/api/mandates/history/route");
+    expect((await active.GET(get("/api/mandates/active"))).status).toBe(401);
+    expect((await history.GET(get("/api/mandates/history"))).status).toBe(401);
+  });
+
+  it("read the session user's mandates only", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    repo.loadActiveMandate.mockResolvedValue({ version: 3 });
+    repo.loadMandateHistory.mockResolvedValue([]);
+    const active = await import("@/app/api/mandates/active/route");
+    const history = await import("@/app/api/mandates/history/route");
+    const q = "?userId=22222222-2222-4222-8222-222222222222";
+    expect((await active.GET(get(`/api/mandates/active${q}`, LIN))).status).toBe(200);
+    expect((await history.GET(get(`/api/mandates/history${q}`, LIN))).status).toBe(200);
+    expect(repo.loadActiveMandate).toHaveBeenCalledWith(LIN);
+    expect(repo.loadMandateHistory).toHaveBeenCalledWith(LIN);
+  });
+
+  it("answer 404 when the user has no active mandate and 500 for a tampered one", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    const active = await import("@/app/api/mandates/active/route");
+    repo.loadActiveMandate.mockResolvedValueOnce(null);
+    const none = await active.GET(get("/api/mandates/active", LIN));
+    expect(none.status).toBe(404);
+    expect(await none.json()).toMatchObject({ code: "no_active_mandate" });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    repo.loadActiveMandate.mockRejectedValueOnce(new Error("stored mandate hash does not match its policy"));
+    const bad = await active.GET(get("/api/mandates/active", LIN));
+    expect(bad.status).toBe(500);
+    expect(JSON.stringify(await bad.json())).not.toContain("hash");
   });
 });
