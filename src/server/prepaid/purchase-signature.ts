@@ -40,6 +40,20 @@ export type PurchaseSignatureReason =
 export type SignatureCheck<T extends object = object> = ({ ok: true } & T) | { ok: false; reason: PurchaseSignatureReason };
 
 const SIG_RE = /^0x[0-9a-fA-F]{130}$/;
+/** secp256k1 n / 2: OpenZeppelin ECDSA reverts on any s above it (signature malleability). */
+const HALF_N = BigInt("0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0");
+
+/**
+ * True for a 65-byte r||s||v signature the contract's ECDSA library would accept: well-formed hex,
+ * s in 1..n/2 (no high-s twin) and v in {0, 1, 27, 28}. Checked before any recovery so a
+ * non-canonical signature is never reported valid off-chain when it would revert on chain.
+ */
+export function isCanonicalSignature(sig: unknown): sig is Hex {
+  if (typeof sig !== "string" || !SIG_RE.test(sig)) return false;
+  const s = BigInt(`0x${sig.slice(66, 130)}`);
+  const v = parseInt(sig.slice(130, 132), 16);
+  return s > BigInt(0) && s <= HALF_N && (v === 0 || v === 1 || v === 27 || v === 28);
+}
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const sameAddress = (a: string | null | undefined, b: string | null | undefined) =>
   !!a && !!b && ADDRESS_RE.test(a) && ADDRESS_RE.test(b) && a.toLowerCase() === b.toLowerCase();
@@ -47,7 +61,7 @@ const sameAddress = (a: string | null | undefined, b: string | null | undefined)
 type Recovered = { ok: true; signer: string } | { ok: false; reason: "malformed_signature" | "malformed_message" };
 
 async function recoverOffer(domain: TypedDataDomain, offer: OfferJson, sig: string): Promise<Recovered> {
-  if (!SIG_RE.test(sig)) return { ok: false, reason: "malformed_signature" };
+  if (!isCanonicalSignature(sig)) return { ok: false, reason: "malformed_signature" };
   let message;
   try {
     message = toOfferMessage(offer);
@@ -63,7 +77,7 @@ async function recoverOffer(domain: TypedDataDomain, offer: OfferJson, sig: stri
 }
 
 async function recoverAuth(domain: TypedDataDomain, auth: PurchaseAuthJson, sig: string): Promise<Recovered> {
-  if (!SIG_RE.test(sig)) return { ok: false, reason: "malformed_signature" };
+  if (!isCanonicalSignature(sig)) return { ok: false, reason: "malformed_signature" };
   let message;
   try {
     message = toPurchaseAuthMessage(auth);

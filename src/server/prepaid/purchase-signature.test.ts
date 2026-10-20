@@ -48,6 +48,15 @@ const signOffer = (o: OfferJson, acct = merchant) =>
 const signAuth = (a: PurchaseAuthJson, acct = consumer) =>
   acct.signTypedData({ domain, types: PURCHASE_AUTH_TYPES, primaryType: "PurchaseAuth", message: toPurchaseAuthMessage(a) });
 
+// Malleable twin of a valid signature: s -> n - s, v flipped. ecrecover accepts it, OpenZeppelin ECDSA does not.
+const SECP_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+const highS = (sig: string) => {
+  const s = SECP_N - BigInt(`0x${sig.slice(66, 130)}`);
+  const v = parseInt(sig.slice(130, 132), 16) === 27 ? 28 : 27;
+  return `${sig.slice(0, 66)}${s.toString(16).padStart(64, "0")}${v.toString(16)}`;
+};
+const withV = (sig: string, v: string) => `${sig.slice(0, 130)}${v}`;
+
 const offerExpect = { merchant: merchant.address, storedOffer: stored, nowSeconds: NOW };
 const authExpect = { owner: consumer.address, agent: agent.address, offerHash: storedHash, nowSeconds: NOW };
 
@@ -173,6 +182,46 @@ describe("verifyConsumerPurchaseAuth", () => {
 
   it.each(["", "0xabcd", `0x${"00".repeat(65)}`, `0x${"gg".repeat(65)}`])("rejects malformed signature %j", async (sig) => {
     expect(await verifyConsumerPurchaseAuth(domain, auth, sig, authExpect)).toEqual({ ok: false, reason: "malformed_signature" });
+  });
+});
+
+describe("non-canonical signatures", () => {
+  it("rejects a high-s twin of a valid offer signature, and the original still passes", async () => {
+    const sig = await signOffer(stored);
+    expect((await verifyMerchantOffer(domain, stored, sig, offerExpect)).ok).toBe(true);
+    expect(await verifyMerchantOffer(domain, stored, highS(sig), offerExpect)).toEqual({ ok: false, reason: "malformed_signature" });
+    expect(await recoverOfferSigner(domain, stored, highS(sig))).toBeNull();
+  });
+
+  it("rejects a high-s twin of a valid purchase authorisation", async () => {
+    const sig = await signAuth(auth);
+    expect(await verifyConsumerPurchaseAuth(domain, auth, highS(sig), authExpect)).toEqual({ ok: false, reason: "malformed_signature" });
+    expect(await recoverPurchaseAuthSigner(domain, auth, highS(sig))).toBeNull();
+  });
+
+  it.each(["02", "1a", "1d", "ff"])("rejects v = 0x%s", async (v) => {
+    expect(await recoverOfferSigner(domain, stored, withV(await signOffer(stored), v))).toBeNull();
+    expect(await recoverPurchaseAuthSigner(domain, auth, withV(await signAuth(auth), v))).toBeNull();
+  });
+
+  it("accepts the raw recovery id (v = 0 or 1) for the same signature", async () => {
+    const sig = await signOffer(stored);
+    const raw = withV(sig, parseInt(sig.slice(130, 132), 16) === 27 ? "00" : "01");
+    expect(await recoverOfferSigner(domain, stored, raw)).toBe(merchant.address);
+  });
+
+  it("rejects s = 0", async () => {
+    const sig = await signOffer(stored);
+    expect(await recoverOfferSigner(domain, stored, `${sig.slice(0, 66)}${"0".repeat(64)}${sig.slice(130)}`)).toBeNull();
+  });
+
+  it("flows through purchaseSignatureFacts as invalid signatures", async () => {
+    const f = await purchaseSignatureFacts(
+      domain,
+      { offer: stored, merchantSig: highS(await signOffer(stored)), auth, consumerSig: highS(await signAuth(auth)) },
+      { owner: consumer.address, merchant: merchant.address, agent: agent.address, storedOffer: stored, nowSeconds: NOW },
+    );
+    expect(f).toMatchObject({ merchantSigValid: false, consumerSigValid: false, merchantReason: "malformed_signature", consumerReason: "malformed_signature" });
   });
 });
 

@@ -16,6 +16,7 @@
 
 import { recoverTypedDataAddress, type Hex, type TypedDataDomain } from "viem";
 import { REDEEM_TYPES, toRedeemMessage, type RedeemJson } from "@/src/server/chain/types";
+import { isCanonicalSignature } from "./purchase-signature";
 
 /** Stable reason strings. */
 export type RedeemSignatureReason =
@@ -50,6 +51,7 @@ export type RedeemExpectation = {
   nowSeconds: number;
 };
 
+/** Shape only; canonicality (low s, v) is enforced per signature in `recoverRedeemSigner`. */
 const SIG_RE = /^0x[0-9a-fA-F]{130}$/;
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const sameAddress = (a: string | null | undefined, b: string | null | undefined) =>
@@ -57,7 +59,7 @@ const sameAddress = (a: string | null | undefined, b: string | null | undefined)
 
 /** Recovers the signer of a Redeem; null when the signature or message cannot be parsed. */
 export async function recoverRedeemSigner(domain: TypedDataDomain, redeem: RedeemJson, signature: string): Promise<string | null> {
-  if (!SIG_RE.test(signature)) return null;
+  if (!isCanonicalSignature(signature)) return null;
   try {
     return await recoverTypedDataAddress({
       domain,

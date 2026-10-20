@@ -17,6 +17,15 @@ const expected = { chainPlanId: "1001", sessionNo: 4, owner: consumer.address, m
 
 const sign = (r: RedeemJson, acct: typeof consumer) =>
   acct.signTypedData({ domain, types: REDEEM_TYPES, primaryType: "Redeem", message: toRedeemMessage(r) });
+// Malleable twin of a valid signature: s -> n - s, v flipped. ecrecover accepts it, OpenZeppelin ECDSA does not.
+const SECP_N = BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");
+const highS = (sig: string) => {
+  const s = SECP_N - BigInt(`0x${sig.slice(66, 130)}`);
+  const v = parseInt(sig.slice(130, 132), 16) === 27 ? 28 : 27;
+  return `${sig.slice(0, 66)}${s.toString(16).padStart(64, "0")}${v.toString(16)}`;
+};
+const withV = (sig: string, v: string) => `${sig.slice(0, 130)}${v}`;
+
 const good = async (r = redeem) => ({ redeem: r, consumerSig: await sign(r, consumer), merchantSig: await sign(r, merchant) });
 
 describe("verifyRedeemSignatures", () => {
@@ -144,6 +153,32 @@ describe("verifyRedeemSignatures", () => {
     const g = await good();
     expect(await verifyRedeemSignatures(domain, { ...g, redeem: { ...redeem, planId: "abc" } }, expected)).toMatchObject({ ok: false, reason: "malformed_message" });
     expect(await verifyRedeemSignatures(domain, g, { ...expected, chainPlanId: "x" })).toMatchObject({ ok: false, reason: "malformed_message" });
+  });
+});
+
+describe("non-canonical signatures", () => {
+  it("rejects a high-s twin for either signature", async () => {
+    const g = await good();
+    expect(await verifyRedeemSignatures(domain, { ...g, consumerSig: highS(g.consumerSig) }, expected)).toEqual({
+      ok: false,
+      reason: "malformed_signature",
+      consumerSigValid: false,
+      merchantSigValid: true,
+    });
+    expect(await verifyRedeemSignatures(domain, { ...g, merchantSig: highS(g.merchantSig) }, expected)).toMatchObject({ ok: false, reason: "malformed_signature" });
+    expect(await recoverRedeemSigner(domain, redeem, highS(g.consumerSig))).toBeNull();
+  });
+
+  it.each(["02", "1a", "1d", "ff"])("rejects v = 0x%s", async (v) => {
+    const g = await good();
+    expect(await verifyRedeemSignatures(domain, { ...g, merchantSig: withV(g.merchantSig, v) }, expected)).toMatchObject({ ok: false, reason: "malformed_signature" });
+  });
+
+  it("accepts the raw recovery id (v = 0 or 1) for the same signature", async () => {
+    const g = await good();
+    const raw = (sig: string) => withV(sig, parseInt(sig.slice(130, 132), 16) === 27 ? "00" : "01");
+    const r = await verifyRedeemSignatures(domain, { ...g, consumerSig: raw(g.consumerSig), merchantSig: raw(g.merchantSig) }, expected);
+    expect(r.ok).toBe(true);
   });
 });
 
