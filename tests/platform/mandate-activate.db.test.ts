@@ -15,7 +15,7 @@ vi.mock("next/server", () => ({ connection: async () => {} }));
 const { POST } = await import("@/app/api/mandates/activate/route");
 
 /** Lin's v3 as the compile route would send it back: no version, every field present. */
-const { version: _v, ...V3_DRAFT } = LIN_MANDATE_V3;
+const V3_DRAFT = Object.fromEntries(Object.entries(LIN_MANDATE_V3).filter(([k]) => k !== "version")) as Omit<typeof LIN_MANDATE_V3, "version">;
 const withCap = (cap: number) => ({ ...V3_DRAFT, global: { daily_outflow_cap: cap } });
 const NARROWER = withCap(500);
 const WIDER = withCap(5000);
