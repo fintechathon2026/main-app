@@ -16,6 +16,15 @@ const repo = vi.hoisted(() => ({
   loadMandateHistory: vi.fn(),
 }));
 vi.mock("@/src/server/db/read/mandate-repo", () => ({ loadActiveMandate: repo.loadActiveMandate, loadMandateHistory: repo.loadMandateHistory }));
+
+const compileDeps = vi.hoisted(() => ({ structured: vi.fn(), baseCurrency: vi.fn() }));
+vi.mock("@/src/agent/models", async (orig) => ({
+  ...(await orig<typeof import("@/src/agent/models")>()),
+  createModelClients: () => ({ mandate_compiler: { chat: vi.fn(), structured: compileDeps.structured } }),
+}));
+vi.mock("@/src/server/db/read/repos", () => ({
+  getReadRepos: () => ({ settings: async () => ({ baseCurrency: compileDeps.baseCurrency() }) }),
+}));
 vi.mock("@/src/server/db/read/audit-repo", () => ({ loadAuditVerify: repo.loadAuditVerify }));
 vi.mock("@/src/server/db/read/feed-repo", () => ({ loadFeed: repo.loadFeed, loadWhy: repo.loadWhy }));
 
@@ -29,6 +38,8 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
   for (const f of Object.values(repo)) f.mockReset();
+  compileDeps.structured.mockReset();
+  compileDeps.baseCurrency.mockReset().mockReturnValue("CNY");
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -179,5 +190,73 @@ describe("GET /api/mandates/active and /history", () => {
     const bad = await active.GET(get("/api/mandates/active", LIN));
     expect(bad.status).toBe(500);
     expect(JSON.stringify(await bad.json())).not.toContain("hash");
+  });
+});
+
+describe("POST /api/mandates/compile", () => {
+  const post = (body: unknown, user?: string) =>
+    new Request("http://localhost/api/mandates/compile", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(user ? { "x-demo-user": user } : {}) },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+
+  it("serves the fixture draft for a valid body, with no session, database or model", async () => {
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    const res = await POST(post({ text: "pay bills under 200" }));
+    expect(res.status).toBe(200);
+    const out = S.MandateCompileResponse.parse(await res.json());
+    expect(out.readback.length).toBeGreaterThan(0);
+    expect(compileDeps.structured).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bad body in fixture mode too: extra keys, empty or non-string text, no JSON", async () => {
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    for (const body of [{ text: "x", userId: LIN }, { text: "" }, { text: 5 }, {}, "not json"]) {
+      expect((await POST(post(body))).status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
+  it("is 401 without a session when fixtures are off, before the body is read", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    expect((await POST(post({ text: "pay bills under 200" }))).status).toBe(401);
+    expect(compileDeps.structured).not.toHaveBeenCalled();
+  });
+
+  it("compiles for the session user: draft, defaulted fields and a template read-back, nothing saved", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    compileDeps.structured.mockResolvedValue({ bills: { auto_pay_max: 200 }, global: { daily_outflow_cap: 500 } });
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    const res = await POST(post({ text: "pay bills under 200, 500 a day at most" }, LIN));
+    expect(res.status).toBe(200);
+    const out = S.MandateCompileResponse.parse(await res.json());
+    expect(out.baseCurrency).toBe("CNY");
+    expect(out.policy.bills.auto_pay_max).toBe(200);
+    expect(out.policy.payees.new_payee).toBe("deny"); // unmentioned -> most restrictive
+    expect(out.defaulted).toContain("payees.new_payee");
+    expect(out.readback[0]).toBe("Pay bills automatically up to CNY 200 each; larger or unusual bills need your approval.");
+    expect(Object.keys(out).sort()).toEqual(["baseCurrency", "defaulted", "policy", "readback"]);
+  });
+
+  it("answers 422 when the model's draft breaks the schema, and for whitespace-only text", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    compileDeps.structured.mockResolvedValue({ payees: { allow: ["SZ_POWER"], add_account: "8812" } });
+    const bad = await POST(post({ text: "allow my power company" }, LIN));
+    expect(bad.status).toBe(422);
+    expect(await bad.json()).toMatchObject({ code: "compile_failed" });
+    const blank = await POST(post({ text: "   " }, LIN));
+    expect(blank.status).toBe(422);
+  });
+
+  it("answers 503 when no recorded model answer exists for the text", async () => {
+    vi.stubEnv("REINS_FIXTURES", "");
+    const { RecordingMissError } = await import("@/src/agent/models");
+    compileDeps.structured.mockRejectedValue(new RecordingMissError("mandate_compiler", "k", "demo_lin"));
+    const { POST } = await import("@/app/api/mandates/compile/route");
+    const res = await POST(post({ text: "something never recorded" }, LIN));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "model_unavailable" });
   });
 });
