@@ -16,7 +16,7 @@ import { MasterDetail, useIsDesktop } from "../components/master-detail";
 import { Money, Row, Rows, SampleTag, StatusIcon, Tag } from "../components/primitives";
 import { SourceInfo } from "../components/source";
 import { ErrorState, SkeletonList } from "../components/states";
-import { SAMPLE_APPROVALS } from "../sample";
+import approvalsFixture from "@/fixtures/api/approvals.json";
 import { CATEGORY_LABEL } from "../words";
 import { PauseButton } from "../shell/pause";
 import { ApprovalDetail, approvalHeadline, approvalSubtitle } from "./approval";
@@ -35,7 +35,7 @@ const baseAmount = (u: Upcoming) => u.amount.base ?? u.amount;
 
 export function HomeScreen() {
   const summary = useApi<SummaryResponse>("/api/summary", summaryFixture as SummaryResponse);
-  const approvals = useApi<ApprovalsResponse>("/api/approvals?status=pending", SAMPLE_APPROVALS);
+  const approvals = useApi<ApprovalsResponse>("/api/approvals?status=pending", approvalsFixture as ApprovalsResponse);
   const [picked, setSelected] = useState<Selected | undefined>(undefined);
   const now = useNow();
   const isDesktop = useIsDesktop();

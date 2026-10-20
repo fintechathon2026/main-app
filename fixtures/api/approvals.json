@@ -1,0 +1,63 @@
+{
+  "items": [
+    {
+      "id": "a0000000-0000-4000-8000-000000000001",
+      "actionId": "ac000000-0000-4000-8000-000000000001",
+      "planId": "91000000-0000-4000-8000-000000000001",
+      "tool": "pay_bill",
+      "title": "Pay bill",
+      "payee": {
+        "id": "LANDLORD_WANG",
+        "name": "Landlord Wang",
+        "source": "registry"
+      },
+      "amount": {
+        "amount": 3500,
+        "currency": "CNY"
+      },
+      "subject": {
+        "kind": "bill",
+        "id": "b1000000-0000-4000-8000-000000000004",
+        "dueDate": "2026-10-28",
+        "period": "2026-10"
+      },
+      "attestation": null,
+      "decision": "require_confirm",
+      "ruleIds": [
+        "payees.allow",
+        "bills.over_auto_pay_max"
+      ],
+      "mandateVersion": 3,
+      "actionHash": "0x7d2c9a41e0b35f8c6a1d4e92b07f3c5a8e1d6b29f40c7a3e5b8d1f2c6a9e0b47",
+      "createdAt": "2026-10-19T01:12:00.000Z",
+      "expiresAt": "2026-10-20T01:12:00.000Z"
+    },
+    {
+      "id": "a0000000-0000-4000-8000-000000000002",
+      "actionId": "ac000000-0000-4000-8000-000000000002",
+      "planId": "91000000-0000-4000-8000-000000000002",
+      "tool": "cancel_subscription",
+      "title": "Cancel subscription: iQIYI",
+      "payee": null,
+      "amount": {
+        "amount": 30,
+        "currency": "CNY"
+      },
+      "subject": {
+        "kind": "subscription",
+        "id": "5b000000-0000-4000-8000-000000000002",
+        "nextRenewal": "2026-11-05",
+        "status": "active"
+      },
+      "attestation": null,
+      "decision": "require_confirm",
+      "ruleIds": [
+        "subscriptions.cancel_needs_confirm"
+      ],
+      "mandateVersion": 3,
+      "actionHash": "0x1b8e4f0a92c7d35e6f1a08b4c92d7e3f5a6b0c18d2e94f7a3b5c6d8e0f1a2b39",
+      "createdAt": "2026-10-19T02:40:00.000Z",
+      "expiresAt": "2026-10-21T02:40:00.000Z"
+    }
+  ]
+}
