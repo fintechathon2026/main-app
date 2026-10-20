@@ -6,7 +6,6 @@
 import { UNTRUSTED_ORIGINS, type Labeled, type Origin } from "@/src/core/types";
 import type { NodeFn } from "./graph-state";
 import { ReaderInvalidOutput } from "./reader/errors";
-import { SignalReaderInvalidOutput } from "./signal_reader";
 import { getDeps } from "./graph-state";
 
 function keepUntrusted<T>(item: Labeled<T>, fallback: Origin, sourceId: string): Labeled<T> {
@@ -43,15 +42,7 @@ export const readSignals: NodeFn = async (state, config) => {
   if (!state.subjectId) return {};
   const merchantId = await store.prepaidPlanMerchant(state.subjectId, state.userId);
   if (!merchantId) return {};
-  let warning: Awaited<ReturnType<typeof signalReader.read>>;
-  try {
-    warning = await signalReader.read(merchantId);
-  } catch (e) {
-    if (!(e instanceof SignalReaderInvalidOutput)) throw e;
-    // Soft signals only ever warn. An unreadable answer drops the warning, never the plan: an
-    // attested exit rests on the oracle-signed attestation the Gate re-verifies, not on this text.
-    return {};
-  }
+  const warning = await signalReader.read(merchantId);
   if (!warning) return {};
   return { warnings: [keepUntrusted(warning, "web", merchantId)] };
 };
