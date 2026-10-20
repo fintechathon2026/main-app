@@ -13,7 +13,8 @@ const settlementAdapters = {
 const chainKeys = ["RELAYER_PRIVATE_KEY", "AGENT_PRIVATE_KEY"];
 const simKeys = ["MERCHANT_SIM_PRIVATE_KEY", "ORACLE_PRIVATE_KEY", "TOKEN_MINTER_PRIVATE_KEY"];
 const keyReadGlobs = ["**/*.{ts,tsx,js,jsx,mjs,cjs}"];
-const keyReadExempt = ["tests/**", "**/*.test.{ts,tsx,js,jsx,mjs,cjs}"];
+// Tests and local scripts (anvil rehearsal, demo setup) use anvil's public test keys.
+const keyReadExempt = ["tests/**", "scripts/**", "**/*.test.{ts,tsx,js,jsx,mjs,cjs}"];
 const chainDir = "src/server/adapters/settlement/chain/**";
 const simDir = "src/sim/**";
 
@@ -99,7 +100,7 @@ const eslintConfig = defineConfig([
     ignores: keyReadExempt,
     rules: { "no-restricted-syntax": ["error", ...keyReadSelectors(simKeys, simDir)] },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "contracts/**", ".claude/**", ".data/**", "supabase/.temp/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "contracts/**", ".claude/**", ".data/**", "supabase/.temp/**", ".worktrees/**", ".gstack/**"]),
 ]);
 
 export default eslintConfig;

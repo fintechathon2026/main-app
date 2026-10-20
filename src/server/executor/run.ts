@@ -12,7 +12,8 @@ import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
-import { SettlementError, type EscrowAdapter, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
+import { chainEscrowFromEnv } from "@/src/server/adapters/settlement/chain/escrow";
+import { SettlementError, type EscrowAdapter, type EscrowPurchaseArgs, type SettlementAdapter } from "@/src/server/adapters/settlement/types";
 import { verifiedVoluntaryExitSignature, type VoluntaryExitSignature } from "@/src/server/prepaid/exit-signature";
 import type { AttestationJson } from "@/src/sim/registry/eip712";
 import {
@@ -72,10 +73,28 @@ async function phaseA(userId: string, action: ActionRow, escrow: EscrowAdapter):
   return { escrowPlan: await escrow.readPlan(chainPlanId) };
 }
 
+/**
+ * REINS_ESCROW=chain uses PrepaidEscrow on chain; anything else the mock escrow (§24.13). The
+ * chain adapter is built on first use, so a misconfigured chain fails the prepaid action
+ * (escrow_not_configured, definitive) instead of silently using the mock.
+ */
+function defaultEscrow(transport: MockbankTransport | undefined): EscrowAdapter {
+  if (process.env.REINS_ESCROW !== "chain") return createMockEscrow({ transport });
+  let chain: EscrowAdapter | null = null;
+  const get = () => (chain ??= chainEscrowFromEnv());
+  return {
+    readPlan: (id) => get().readPlan(id),
+    purchase: (a, o) => get().purchase(a, o),
+    redeem: (a, o) => get().redeem(a, o),
+    exitWithAttestation: (a, o) => get().exitWithAttestation(a, o),
+    exitVoluntary: (a, o) => get().exitVoluntary(a, o),
+    lookup: (k, u) => get().lookup(k, u),
+  };
+}
+
 export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
   const settlement = deps.settlement ?? createMockbankSettlement({ transport: deps.transport });
-  // REINS_ESCROW=chain is not implemented yet (R3); the mock escrow is the R0 fallback (§24.13).
-  const escrow = deps.escrow ?? createMockEscrow({ transport: deps.transport });
+  const escrow = deps.escrow ?? defaultEscrow(deps.transport);
 
   async function run(actionId: string, userId: string): Promise<ExecResult> {
     // ---- Phase A ------------------------------------------------------------------------
@@ -256,7 +275,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         });
         if (!ids) throw new SettlementError("plan_not_found", true);
         if (!approved && !attestationId) throw new SettlementError("attestation_missing", true);
-        const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key };
+        const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key, userId: row.user_id };
         // The escrow re-verifies the oracle signature, so it gets the signed record the Gate used.
         const attestation = approved
           ? null
@@ -276,9 +295,76 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         if (res.status === "pending") throw new SettlementError("pending", false, res);
         return { txHash: res.txHash, simulated: res.txHash.startsWith("mock:"), mode: approved ? "voluntary" : "attested", events: res.events };
       }
+      case "prepaid_purchase":
+      case "prepaid_redeem":
+      case "prepaid_exit_voluntary": {
+        // User-signed actions (R2-06): the escrow gets exactly the payload phase B re-verified,
+        // and re-verifies it itself. Relayed: the relayer pays gas, never chooses a recipient.
+        const sendOpts = { actionId: row.id, idempotencyKey: row.idempotency_key, userId: row.user_id };
+        const payload = await withUserTx(row.user_id, async (tx) => {
+          const r = await tx.query("select payload from public.prepaid_action_signatures where action_id = $1 and tool = $2", [row.id, row.tool]);
+          return r.rows[0]?.payload as Record<string, unknown> | undefined;
+        });
+        if (!payload) throw new SettlementError("consumer_signature_required", true);
+        let chainPlanId: string | null = null;
+        if (row.tool !== "prepaid_purchase") {
+          chainPlanId = await withUserTx(row.user_id, async (tx) => {
+            const r = await tx.query("select chain_plan_id::text as id from public.prepaid_plans where id = $1", [a.plan_id]);
+            return (r.rows[0]?.id as string | undefined) ?? null;
+          });
+          if (!chainPlanId) throw new SettlementError("plan_not_found", true);
+        }
+        const res =
+          row.tool === "prepaid_purchase"
+            ? await escrow.purchase(
+                {
+                  offer: payload.offer as EscrowPurchaseArgs["offer"],
+                  merchantSig: String(payload.merchantSig),
+                  auth: payload.auth as EscrowPurchaseArgs["auth"],
+                  consumerSig: String(payload.consumerSig),
+                  permit: payload.permit,
+                },
+                sendOpts,
+              )
+            : row.tool === "prepaid_redeem"
+              ? await escrow.redeem(
+                  {
+                    chainPlanId: chainPlanId!,
+                    sessionNo: Number(payload.sessionNo),
+                    deadline: Number(payload.deadline),
+                    consumerSig: String(payload.consumerSig),
+                    merchantSig: String(payload.merchantSig),
+                  },
+                  sendOpts,
+                )
+              : await escrow.exitVoluntary({ chainPlanId: chainPlanId!, deadline: Number(payload.deadline), consumerSig: String(payload.consumerSig) }, sendOpts);
+        if (res.status === "reverted") throw new SettlementError(res.reason, true, res);
+        if (res.status === "pending") throw new SettlementError("pending", false, res);
+        return { txHash: res.txHash, simulated: res.txHash.startsWith("mock:"), events: res.events };
+      }
       default:
         throw new SettlementError(`${row.tool}_not_supported`, true);
     }
+  }
+
+  /**
+   * Mock escrow only: there is no chain to index, so the confirmed purchase (the escrow's own event:
+   * plan id, consumer, merchant) becomes the user's prepaid_plans row here. On chain, chain-sync
+   * indexes it from the Purchased log instead and this is a no-op.
+   */
+  async function mirrorMockPurchase(tx: import("pg").PoolClient, row: ActionRow, result: unknown) {
+    const r = result as { txHash?: string; simulated?: boolean; events?: { chainPlanId?: string; merchant?: string }[] };
+    const ev = r.events?.[0];
+    if (!r.simulated || !ev?.chainPlanId || !ev.merchant || !r.txHash) return;
+    await tx.query(
+      `insert into public.prepaid_plans (user_id, chain_plan_id, merchant_id, unit_price, units_total, units_redeemed, cancel_fee_bps,
+         agent_address, status, purchase_tx, origin, last_synced_block)
+       select $1, $2, m.id, o.unit_price, o.units, 0, o.cancel_fee_bps, $5, 'active', $3, 'chain', 0
+         from public.prepaid_offers o join public.prepaid_merchants m on m.id = o.merchant_id
+        where o.id = $4 and lower(m.chain_address) = lower($6)
+       on conflict (chain_plan_id) do nothing`,
+      [row.user_id, ev.chainPlanId, r.txHash, row.args_json.offer_id, process.env.AGENT_ADDRESS ?? null, ev.merchant],
+    );
   }
 
   async function finalize(row: ActionRow, o: { status: "succeeded" | "failed" | "unknown"; result: unknown; error?: string }) {
@@ -307,6 +393,17 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         if (row.tool === "pay_bill") await tx.query("update public.bills set status = 'paid' where id = $1", [row.args_json.bill_id]);
         if (row.tool === "cancel_subscription") {
           await tx.query("update public.subscriptions set status = 'cancelled' where id = $1", [row.args_json.subscription_id]);
+        }
+        if (row.tool === "prepaid_purchase") await mirrorMockPurchase(tx, row, o.result);
+        if (row.tool === "prepaid_exit_voluntary") {
+          await tx.query("update public.prepaid_plans set status = 'exited_voluntary' where id = $1", [row.args_json.plan_id]);
+        }
+        if (row.tool === "prepaid_redeem") {
+          // The indexer (chain) or mock sync records the session with its tx; mirror the counter now.
+          await tx.query("update public.prepaid_plans set units_redeemed = greatest(units_redeemed, $2) where id = $1", [
+            row.args_json.plan_id,
+            row.args_json.session_no,
+          ]);
         }
         if (row.tool === "prepaid_exit") {
           const mode = (o.result as { mode?: string }).mode;

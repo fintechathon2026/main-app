@@ -398,6 +398,15 @@ export async function buildPrepaidPlans(d: ViewDeps): Promise<PrepaidPlansRespon
       unitsTotal: p.units_total,
       unitsRedeemed: p.units_redeemed,
       balanceInEscrow: { amount: p.status === "active" ? roundBase(unit * left) : 0, currency: cur },
+      ...(p.status === "exited_attested" || p.status === "exited_voluntary"
+        ? {
+            refund: {
+              // Same rule as PrepaidEscrow: the voluntary-exit fee is cancelFeeBps of the unused balance.
+              amount: roundBase(unit * left * (p.status === "exited_voluntary" ? 1 - p.cancel_fee_bps / 10_000 : 1)),
+              currency: cur,
+            },
+          }
+        : {}),
       cancelFeeBps: p.cancel_fee_bps,
       status: p.status,
       purchaseTx: chainTxRef(p.purchase_tx),

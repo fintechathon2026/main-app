@@ -87,7 +87,7 @@ Node 22, pnpm 11. Copy `.env.example` to `.env.local` first.
 | `pnpm test` | Vitest, all suites |
 | `pnpm vitest run tests/harness/resume.test.ts` | One file; add `-t "name"` for one test |
 | `pnpm db:checkpointer` | Create LangGraph checkpoint tables (admin connection; grants the app role) |
-| `forge test` | Contract tests, from `contracts/` (not built yet) |
+| `forge test` | Contract tests, from `contracts/` (needs Foundry and `git submodule update --init --recursive`; see `contracts/README.md`) |
 
 **Database tests.** Many suites (`tests/foundations`, `tests/e2e`, `tests/harness`, `tests/risk`, `tests/read`) need local Supabase and are skipped when `DATABASE_URL` is unset. Run them with the env loaded:
 
@@ -98,6 +98,8 @@ set -a; . ./.env.local; set +a; pnpm test
 ```
 
 `.env.local` (gitignored) holds the local `DATABASE_URL` (role `reins_server`), `MOCKBANK_DATABASE_URL`, `TEST_ADMIN_DATABASE_URL`, `MOCKBANK_API_KEY`, `AGENT_ADDRESS`, `ORACLE_ADDRESS`. Never edit an applied migration; add a new file and run `pnpm exec supabase migration up`. Do not `db reset` while another session is running tests.
+
+**Chain tests.** `tests/chain` start a private anvil per file and deploy from `contracts/out`; they skip without `anvil` on `PATH` (or `~/.foundry/bin`), without `forge build`, or without `DATABASE_URL`. After changing a contract, regenerate `src/server/chain/abi.ts` with `scripts/export-contract-abi.ts` (a test compares them).
 
 **Demo recordings.** `REINS_MODELS=recorded` replays `evals/recordings/demo_lin/` (keys are hashes of the exact model request, so any prompt, tool-list or context change makes them miss). Regenerate with `node --env-file=.env.local --experimental-transform-types scripts/record-demo.ts`; see `evals/README.md`.
 
@@ -111,9 +113,19 @@ Read `docs/architecture.md` for detail. The shape that needs several files to se
 - **Dependency injection.** The graph gets everything through `config.configurable.deps` (`src/agent/deps.ts`: models, read tools, `PlanStore`, executor, readers). `src/agent/wiring.ts` builds the real ones; tests build fakes (`tests/agent/fakes.ts`). `ModelClient` has live, recorded and recording implementations (`src/agent/models`).
 - **Pure core.** `src/core/**` has no I/O, clock, randomness or env (ESLint-enforced): Gate, mandate schema and hashing, detectors, advisor and summary algorithms. The same view builders (`src/server/db/read/views.ts`) feed both agent read tools and the UI routes, so numbers match. UI response types are in `src/server/api-types.ts` with fixtures in `fixtures/api/` (`REINS_FIXTURES=1` serves them without a DB).
 - **Data.** Supabase Postgres: `public` (RLS on every user-scoped table; `reins_server` has no BYPASSRLS and sets `app.user_id` per transaction via `withUserTx`), `langgraph` (checkpoints), `mockbank` (separate role, reached over HTTP at `/mockbank/*`), `eval`. The audit log is append-only and hash-chained per user.
-- **Prepaid escrow.** Currently mocked (`REINS_ESCROW=mock`): the mock bank holds plans and `prepaid_exit` refunds the owner only. Attestations come from the registry simulator (`src/sim/registry`, `app/sim/registry`) signed with the oracle key (EIP-712, `src/sim/registry/eip712.ts`); the Gate and executor re-verify signatures. `src/sim/**` plays an outside party and must not import executor, agent or adapters. The Solidity contract and chain adapter are R3's and not built.
+- **Prepaid escrow.** `REINS_ESCROW=mock` (default): the mock bank holds plans and `prepaid_exit` refunds the owner only. `REINS_ESCROW=chain`: `PrepaidEscrow` (`contracts/`) through `ChainEscrowAdapter` (`src/server/adapters/settlement/chain/escrow.ts`; relayer and agent keys, nonce rows in `chain_nonces`, every send recorded in `chain_txs` and re-used on retry), indexed by `cron/chain-sync` (`src/server/chain/indexer.ts`). Spec: `docs/PRD_PrepaidEscrow_Contract.md`. Attestations come from the registry simulator (`src/sim/registry`, `app/sim/registry`) signed with the oracle key (EIP-712, `src/sim/registry/eip712.ts`); offers and check-ins from the merchant simulator (`src/sim/merchant`). The Gate, executor and contract each re-verify signatures. `src/sim/**` plays an outside party and must not import executor, agent or adapters. User-signed purchase/check-in routes and browser signing are not built yet (R2-07, R4).
 - **Ownership.** Some modules are minimal versions written by R1 for R2/R3 (file headers say "Owner: R2|R3 … Minimal version by R1"); see the R1 note in `task.md`.
 
 ## Next.js 16
 
 This Next.js version has breaking changes from older training data. Before writing Next.js code, read the relevant guide in `node_modules/next/dist/docs/` and heed deprecation notices. `cacheComponents` is on in `next.config.ts`. Route handlers run on Node by default. Do not add `export const runtime`: Cache Components does not support the runtime segment config, even `"nodejs"`. The Edge runtime is deprecated and not used.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

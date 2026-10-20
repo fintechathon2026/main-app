@@ -9,7 +9,10 @@ import { actionHash, hashPolicy } from "@/src/core/mandate/canonical";
 import { parsePolicy, type Policy } from "@/src/core/mandate/schema";
 import { approvalState } from "@/src/server/approvals";
 import type { EscrowPlanState } from "@/src/server/adapters/settlement/types";
-import { verifiedVoluntaryExitSignature } from "@/src/server/prepaid/exit-signature";
+import { escrowDomainFromEnv, type OfferJson, type PurchaseAuthJson } from "@/src/server/chain/types";
+import { recoverVoluntaryExitSigner, verifiedVoluntaryExitSignature } from "@/src/server/prepaid/exit-signature";
+import { purchaseSignatureFacts } from "@/src/server/prepaid/purchase-signature";
+import { verifyRedeemSignatures } from "@/src/server/prepaid/redeem-signature";
 import { AttestationWire, recoverAttestationSigner } from "@/src/server/risk/attestation";
 import { attestationDomainFromEnv, attestationKindFromCode } from "@/src/sim/registry/eip712";
 
@@ -103,7 +106,8 @@ export async function buildSnapshot(
 
   if (action.tool === "pay_bill") await payBillFacts(tx, snap, userId, args, ctx, policy?.global.per_payee_daily_cap);
   if (action.tool === "cancel_subscription") await subscriptionFacts(tx, snap, userId, str(args.subscription_id), ctx);
-  if (action.tool.startsWith("prepaid_")) await prepaidFacts(tx, snap, action, phaseA, ctx, policy);
+  if (action.tool === "prepaid_purchase") await purchaseFacts(tx, snap, action, ctx);
+  else if (action.tool.startsWith("prepaid_")) await prepaidFacts(tx, snap, action, phaseA, ctx, policy);
   return snap;
 }
 
@@ -300,13 +304,96 @@ async function prepaidFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRo
         })) !== null;
     }
   }
-  // Other user-signed prepaid actions (purchase, redeem, the voluntary-exit tool) need signature
-  // recovery, which is not implemented in this minimal version: they stay false, so the Gate denies.
   facts.merchantSigValid = false;
+  // User-signed actions: the signed payload stored next to the action (never the args), re-verified
+  // here against the escrow plan read in phase A. Anything missing or wrong stays false -> deny.
+  if (facts.plan && chain && row && (action.tool === "prepaid_redeem" || action.tool === "prepaid_exit_voluntary")) {
+    const payload = await signedPayload(tx, action);
+    const nowSeconds = Math.floor(Date.parse(ctx.now) / 1000);
+    if (action.tool === "prepaid_redeem" && payload) {
+      const r = await verifyRedeemSignatures(
+        escrowDomainFromEnv(),
+        {
+          redeem: { planId: row.chain_plan_id, sessionNo: Number(payload.sessionNo), deadline: Number(payload.deadline) },
+          consumerSig: str(payload.consumerSig),
+          merchantSig: str(payload.merchantSig),
+        },
+        { chainPlanId: row.chain_plan_id, sessionNo: facts.plan.nextSession, owner: chain.owner, merchant: chain.merchant, nowSeconds },
+      );
+      facts.consumerSigValid = r.consumerSigValid;
+      facts.merchantSigValid = r.merchantSigValid;
+      facts.sessionNo = Number(payload.sessionNo);
+    }
+    if (action.tool === "prepaid_exit_voluntary" && payload) {
+      const sig = { deadline: Number(payload.deadline), consumerSig: str(payload.consumerSig) };
+      const signer = Number.isSafeInteger(sig.deadline) && sig.deadline > nowSeconds ? await recoverVoluntaryExitSigner(row.chain_plan_id, sig) : null;
+      facts.consumerSigValid = !!signer && signer.toLowerCase() === chain.owner.toLowerCase();
+    }
+  }
   snap.prepaid = facts;
 }
 
 /** Chain plan id for a prepaid action's plan, for the phase A read. */
+/** The signed payload the user submitted for this action (prepaid_action_signatures), or null. */
+async function signedPayload(tx: PoolClient, action: ActionRow): Promise<Record<string, unknown> | null> {
+  const r = await tx.query("select payload from public.prepaid_action_signatures where action_id = $1 and user_id = $2 and tool = $3", [
+    action.id,
+    action.user_id,
+    action.tool,
+  ]);
+  const p = r.rows[0]?.payload;
+  return p && typeof p === "object" ? (p as Record<string, unknown>) : null;
+}
+
+/**
+ * prepaid_purchase: the offer row (by id) gives the stored terms and merchant; the browser's signed
+ * payload must match them. The wallet is the user's registered consumer address; the agent named
+ * in PurchaseAuth must be ours (AGENT_ADDRESS), so the plan can be exited by Reins on a notice.
+ */
+async function purchaseFacts(tx: PoolClient, snap: GateSnapshot, action: ActionRow, ctx: UserCtx) {
+  const userId = action.user_id;
+  const wallet = await tx.query("select address from public.wallets where user_id = $1 and kind = 'consumer_browser'", [userId]);
+  const facts: PrepaidFacts = { actor: action.actor, ownerWallet: wallet.rows[0]?.address ?? null, plan: null, consumerSigValid: false };
+  snap.prepaid = facts;
+  const offerId = str(action.args_json.offer_id);
+  if (!/^[0-9a-f-]{36}$/i.test(offerId)) return;
+  const o = (
+    await tx.query(
+      `select o.unit_price::text as unit_price, o.units, o.cancel_fee_bps,
+              o.offer_json, m.chain_address, m.escrow_supported
+         from public.prepaid_offers o join public.prepaid_merchants m on m.id = o.merchant_id
+        where o.id = $1`,
+      [offerId],
+    )
+  ).rows[0];
+  if (!o) return;
+  const payload = await signedPayload(tx, action);
+  const total = (Number(o.unit_price) * Number(o.units)) / 100; // fen -> base units
+  const offerRow: PrepaidFacts["offer"] = { merchantSigValid: false, expired: true, termsMatchStored: false, escrowSupported: o.escrow_supported, totalBase: total };
+  facts.offer = offerRow;
+  if (!payload || !facts.ownerWallet) return;
+  const signed = payload.offer as OfferJson | undefined;
+  // Stored terms: the price, size and fee from the offer row; merchant from the merchant row. The
+  // expiry and nonce are what the merchant signed (the sim re-issues offers), so they come from the
+  // signed offer; expiry is checked against now by purchaseSignatureFacts.
+  if (!signed || typeof signed !== "object") return;
+  const stored: OfferJson = {
+    merchant: String(o.chain_address),
+    unitPrice: Number(o.unit_price),
+    units: Number(o.units),
+    cancelFeeBps: Number(o.cancel_fee_bps),
+    expiresAt: Number(signed.expiresAt),
+    nonce: String(signed.nonce),
+  };
+  const f = await purchaseSignatureFacts(
+    escrowDomainFromEnv(),
+    { offer: signed, merchantSig: str(payload.merchantSig), auth: payload.auth as PurchaseAuthJson, consumerSig: str(payload.consumerSig) },
+    { owner: facts.ownerWallet, merchant: String(o.chain_address), agent: process.env.AGENT_ADDRESS || null, storedOffer: stored, nowSeconds: Math.floor(Date.parse(ctx.now) / 1000) },
+  );
+  facts.offer = { ...offerRow, merchantSigValid: f.merchantSigValid, expired: f.expired, termsMatchStored: f.termsMatchStored };
+  facts.consumerSigValid = f.consumerSigValid;
+}
+
 export async function prepaidChainPlanId(tx: PoolClient, action: ActionRow): Promise<string | null> {
   const planId = str(action.args_json.plan_id);
   if (!/^[0-9a-f-]{36}$/i.test(planId)) return null;

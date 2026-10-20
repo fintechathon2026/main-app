@@ -1,7 +1,8 @@
 "use client";
 
 // Evidence (docs/ui-direction.md §8): prove what happened. Desktop-first table; phones get a
-// simple list. Data: GET /api/audit/verify and the record (R3, not built yet) -> sample.
+// simple list. Data: GET /api/audit/verify (newest page of the hash-chained audit log) and
+// GET /api/audit/export for the full record.
 
 import { DownloadSimple, SealCheck, SealWarning } from "@phosphor-icons/react/dist/ssr";
 import { useApi } from "../data";
@@ -9,13 +10,13 @@ import { dateTime, shortHash } from "../format";
 import { PageHeader } from "../components/page";
 import { ChainLink, StatusBadge } from "../components/primitives";
 import { ErrorState, SkeletonList } from "../components/states";
-import { SAMPLE_AUDIT, type AuditRow } from "../sample";
+import auditFixture from "@/fixtures/api/audit-verify.json";
+import type { AuditVerifyResponse, AuditVerifyRow } from "@/src/server/api-types";
 
-type Audit = typeof SAMPLE_AUDIT;
-const WHO: Record<AuditRow["actor"], string> = { agent: "Reins", user: "You", system: "Schedule" };
+const WHO: Record<AuditVerifyRow["actor"], string> = { agent: "Reins", user: "You", system: "Schedule" };
 
 export function EvidenceScreen() {
-  const audit = useApi<Audit>("/api/audit/verify", SAMPLE_AUDIT);
+  const audit = useApi<AuditVerifyResponse>("/api/audit/verify", auditFixture as AuditVerifyResponse);
   if (audit.state === "loading") return <SkeletonList rows={8} />;
   if (audit.state === "error") return <ErrorState onRetry={audit.retry} />;
   const a = audit.data;
@@ -49,11 +50,23 @@ export function EvidenceScreen() {
         <div>
           <p className="text-[15px] font-semibold">Tamper check: {a.chainOk ? "passed" : "failed"}</p>
           <p className="text-[14px] text-ink">
-            Each entry is linked to the one before it, so changing or deleting an entry would break the check. Last checked{" "}
-            {dateTime(a.checkedAt)}.
+            Each entry is linked to the one before it, so changing or deleting an entry would break the check.{" "}
+            <span className="amount">{a.count}</span> entries checked {dateTime(a.checkedAt)}
+            {a.firstBreakSeq !== null && (
+              <>
+                , first break at entry <span className="amount">{a.firstBreakSeq}</span>
+              </>
+            )}
+            .
           </p>
         </div>
       </div>
+
+      {a.rows.length < a.count && (
+        <p className="mb-3 text-[13px] text-muted">
+          Showing the newest <span className="amount">{a.rows.length}</span> of <span className="amount">{a.count}</span>. Download the record for all of them.
+        </p>
+      )}
 
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-card border border-line bg-surface lg:block">
@@ -83,7 +96,7 @@ export function EvidenceScreen() {
                   )}
                 </td>
                 <td className="px-4 py-3">{WHO[r.actor]}</td>
-                <td className="px-4 py-3">{r.status ? <StatusBadge status={r.status} /> : <span className="text-muted">Signed</span>}</td>
+                <td className="px-4 py-3">{r.status ? <StatusBadge status={r.status} /> : <span className="text-muted" aria-label="Not a decision">—</span>}</td>
                 <td className="num break-all px-4 py-3 text-[12px] text-muted">{r.ruleIds.map((id) => `§${id}`).join(" ")}</td>
                 <td className="num whitespace-nowrap px-4 py-3 text-[12px] text-muted">{shortHash(r.hash)}</td>
               </tr>
@@ -94,7 +107,8 @@ export function EvidenceScreen() {
 
       {/* Phone list */}
       <div className="lg:hidden">
-        <ul className="overflow-hidden rounded-card border border-line bg-surface">
+        {a.rows.length === 0 && <p className="rounded-card bg-sunken px-4 py-6 text-center text-[14px] text-muted">Nothing recorded yet.</p>}
+        <ul className="overflow-hidden rounded-card border border-line bg-surface empty:hidden">
           {a.rows.map((r) => (
             <li key={r.seq} className="border-b border-line px-4 py-3 last:border-b-0">
               <div className="flex items-start justify-between gap-3">

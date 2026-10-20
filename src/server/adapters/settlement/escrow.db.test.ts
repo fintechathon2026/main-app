@@ -16,7 +16,8 @@ import { createMockEscrow } from "./mockbank";
 describe.skipIf(!DB_ENABLED)("mock escrow adapter", () => {
   let admin: Pool;
   let restoreOracle: () => void;
-  const opts = () => ({ actionId: randomUUID(), idempotencyKey: `escrow-adapter:${randomUUID()}` });
+  // userId is ignored by the mock escrow; the chain adapter scopes chain_txs by it.
+  const opts = () => ({ actionId: randomUUID(), idempotencyKey: `escrow-adapter:${randomUUID()}`, userId: randomUUID() });
 
   beforeAll(() => {
     process.env.MOCKBANK_API_KEY ??= "test-mockbank-key";

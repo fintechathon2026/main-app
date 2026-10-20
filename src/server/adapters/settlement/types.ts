@@ -36,7 +36,11 @@ export type ChainResult =
   | { status: "reverted"; txHash: string | null; reason: string }
   | { status: "pending"; txHash: string };
 
-export type EscrowSendOpts = { actionId: string; idempotencyKey: string };
+/**
+ * `userId` scopes the chain adapter's chain_txs writes and attestation read (RLS); the mock
+ * ignores it (PRD_PrepaidEscrow_Contract §7.3).
+ */
+export type EscrowSendOpts = { actionId: string; idempotencyKey: string; userId: string };
 
 /** Contract (or mock escrow) plan state, read at decision time. Amounts in fen. */
 export type EscrowPlanState = {
@@ -64,7 +68,8 @@ export type EscrowRedeemArgs = { chainPlanId: string; sessionNo: number; deadlin
 
 /**
  * EscrowAdapter (architecture §24.5). purchase and redeem are relayed for the parties that
- * signed them; exitWithAttestation is the only call made with the agent key.
+ * signed them; exitWithAttestation is the only call made with the agent key. Implementations:
+ * the mock escrow (mockbank.ts) and the chain adapter (chain/escrow.ts, REINS_ESCROW=chain).
  */
 export interface EscrowAdapter {
   readPlan(chainPlanId: string): Promise<EscrowPlanState | null>;
@@ -77,5 +82,6 @@ export interface EscrowAdapter {
    * VoluntaryExit(planId, deadline) signature; both are required, an unsigned exit does not compile.
    */
   exitVoluntary(a: { chainPlanId: string; deadline: number; consumerSig: string }, o: EscrowSendOpts): Promise<ChainResult>;
-  lookup(idempotencyKey: string): Promise<ChainResult | null>;
+  /** `userId`: the chain adapter can only read that user's transactions (RLS); without it, null. */
+  lookup(idempotencyKey: string, userId?: string): Promise<ChainResult | null>;
 }

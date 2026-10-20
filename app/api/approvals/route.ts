@@ -3,7 +3,9 @@
 // unexpired approval cards. Cards are built from actions.args_json and registry names only.
 // No `runtime` export: cacheComponents is on, and Node is the default runtime.
 
+import fixture from "@/fixtures/api/approvals.json";
 import { getSessionUserId } from "@/src/server/auth/session";
+import { fixturesEnabled } from "@/src/server/db/read/http";
 import { listPendingCards, type ApprovalsResponse } from "./_lib/cards";
 
 type ErrorBody = { error: string };
@@ -11,6 +13,8 @@ const json = (body: ApprovalsResponse | ErrorBody, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
 
 export async function GET(request: Request): Promise<Response> {
+  // REINS_FIXTURES=1 serves fixtures/api/approvals.json, like the read routes (no DB, no session).
+  if (fixturesEnabled()) return json(fixture as ApprovalsResponse);
   const userId = await getSessionUserId(request);
   if (!userId) return json({ error: "unauthorized" }, 401);
 

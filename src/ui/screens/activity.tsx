@@ -1,22 +1,25 @@
 "use client";
 
 // Activity (docs/ui-direction.md §8): everything Reins did or tried, and why.
-// Data: GET /api/feed (R2, not built yet) -> labelled sample until it lands.
+// Data: GET /api/feed for the list, GET /api/feed/:id/why for the Rule check of the open item.
+// Without a session the screens fall back to the route's fixture, labelled as sample data.
 
 import { ArrowRight, Check, X } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useState } from "react";
 import { useApi, useNow } from "../data";
-import { dateTime, dayLabel } from "../format";
+import { dateTime, dayLabel, shortHash } from "../format";
 import { MasterDetail, useIsDesktop } from "../components/master-detail";
 import { PageHeader } from "../components/page";
-import { AgentNote, ChainLink, Money, Row, Rows, SimulatedTag, StatusBadge, StatusIcon } from "../components/primitives";
+import feedFixture from "@/fixtures/api/feed.json";
+import whyFixtures from "@/fixtures/api/feed-why.json";
+import type { FeedItem, FeedResponse, FeedWhyResponse } from "@/src/server/api-types";
+import { ChainLink, Money, Row, Rows, SimulatedTag, StatusBadge, StatusIcon } from "../components/primitives";
 import { ErrorState, SkeletonList } from "../components/states";
-import { SAMPLE_FEED, type FeedItem } from "../sample";
 import { STATUS_LABEL } from "../words";
 
 export function ActivityScreen() {
-  const feed = useApi<FeedItem[]>("/api/feed", SAMPLE_FEED);
+  const feed = useApi<FeedResponse>("/api/feed", feedFixture as FeedResponse);
   const now = useNow();
   const isDesktop = useIsDesktop();
   const [picked, setPicked] = useState<string | null | undefined>(undefined);
@@ -41,7 +44,7 @@ export function ActivityScreen() {
         detailKey={selectedId ?? "none"}
         detailLabel="Why this happened"
         onClose={() => setPicked(null)}
-        detail={selected ? <WhyDetail item={selected} /> : null}
+        detail={selected ? <WhyDetail key={selected.id} item={selected} /> : null}
         list={
           <div>
             <div className="overflow-hidden rounded-card border border-line bg-surface">
@@ -87,6 +90,12 @@ export function ActivityScreen() {
 }
 
 function WhyDetail({ item }: { item: FeedItem }) {
+  const fallback = (whyFixtures as Record<string, FeedWhyResponse>)[item.id];
+  const why = useApi<FeedWhyResponse>(`/api/feed/${item.id}/why`, fallback);
+  // The list row already carries the checks; the why route is the stored trace and adds the
+  // decision and mandate hash. Use the row's checks until it answers.
+  const checks = why.state === "ready" ? why.data.checks : item.checks;
+
   return (
     <div>
       <StatusBadge status={item.status} />
@@ -95,9 +104,10 @@ function WhyDetail({ item }: { item: FeedItem }) {
       <p className="mt-3 text-[15px] leading-relaxed">{item.detail}</p>
 
       <h3 className="mt-6 text-[15px] font-semibold">Rule check</h3>
-      <ul className="mt-2 space-y-2">
-        {item.checks.map((c) => (
-          <li key={c.label} className="flex items-start gap-2 text-[14px]">
+      {why.state === "error" && <p className="mt-2 text-[13px] text-muted">Could not load the stored check. Showing the summary.</p>}
+      <ol className="mt-2 space-y-2">
+        {checks.map((c, i) => (
+          <li key={`${i}-${c.label}`} className="flex items-start gap-2 text-[14px]">
             <span
               className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded-full ${c.passed ? "bg-ok-bg text-ok" : "bg-stop-bg text-stop"}`}
               aria-label={c.passed ? "Passed" : "Did not pass"}
@@ -107,26 +117,33 @@ function WhyDetail({ item }: { item: FeedItem }) {
             {c.label}
           </li>
         ))}
-      </ul>
+      </ol>
 
       <div className="mt-6">
         <Rows>
           <Row label="When">{dateTime(item.at)}</Row>
           <Row label="Rule">
             <span className="num break-all text-[13px]">
-              {item.ruleIds.map((id) => `§${id}`).join(", ")} v{item.mandateVersion}
+              {item.ruleIds.length ? item.ruleIds.map((id) => `§${id}`).join(", ") : "—"} v{item.mandateVersion}
             </span>
           </Row>
-          <Row label="Data from">
-            <ul className="space-y-1">
-              {item.origins.map((o) => (
-                <li key={o.label} className="flex flex-wrap items-center gap-2">
-                  {o.label}
-                  {o.simulated && <SimulatedTag />}
-                </li>
-              ))}
-            </ul>
-          </Row>
+          {why.state === "ready" && why.data.mandateHash && (
+            <Row label="Rules signed as">
+              <span className="num break-all text-[12px] text-muted">{shortHash(why.data.mandateHash)}</span>
+            </Row>
+          )}
+          {item.origins.length > 0 && (
+            <Row label="Data from">
+              <ul className="space-y-1">
+                {item.origins.map((o) => (
+                  <li key={o.label} className="flex flex-wrap items-center gap-2">
+                    {o.label}
+                    {o.simulated && <SimulatedTag />}
+                  </li>
+                ))}
+              </ul>
+            </Row>
+          )}
           {item.tx && (
             <Row label="On chain">
               <ChainLink hash={item.tx.hash} url={item.tx.explorerUrl} />
@@ -135,15 +152,9 @@ function WhyDetail({ item }: { item: FeedItem }) {
         </Rows>
       </div>
 
+      {/* Blocked covers denied, failed, expired and rejected actions: say only what is always true. */}
       {item.status === "blocked" && (
-        <p className="mt-4 rounded-field bg-sunken px-3 py-2 text-[14px]">
-          Nothing was paid. To allow a payment like this, add the payee in Your rules first.
-        </p>
-      )}
-      {item.agentNote && (
-        <div className="mt-4">
-          <AgentNote>{item.agentNote}</AgentNote>
-        </div>
+        <p className="mt-4 rounded-field bg-sunken px-3 py-2 text-[14px]">Nothing was paid or changed. The rule check above shows which step stopped it.</p>
       )}
     </div>
   );

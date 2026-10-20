@@ -88,6 +88,8 @@ const FAILED: Record<string, string> = {
   "fx.rate_stale_or_unknown": "The exchange rate is too old",
   "payees.not_allowed": "The payee is not in your saved payees",
   "bills.over_auto_pay_max": "The amount is over your auto-pay limit",
+  "bills.anomaly.over_threshold": "The amount is unusual compared with your last bills",
+  "bills.anomaly.insufficient_history": "There are not enough past bills to tell if the amount is usual",
   "global.daily_outflow_cap.exceeded": "This would go over your daily limit",
   "global.per_payee_daily_cap.exceeded": "This would go over the daily limit for this payee",
   "subscriptions.not_found": "The subscription was not found",

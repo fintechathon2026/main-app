@@ -86,6 +86,11 @@ export type PrepaidPlanItem = {
   unitsTotal: number;
   unitsRedeemed: number;
   balanceInEscrow: Money;
+  /**
+   * After an exit: what went back to the owner (unused sessions, minus the fee on a voluntary
+   * exit), from the plan's stored terms. Absent while the plan is active or completed.
+   */
+  refund?: Money;
   cancelFeeBps: number;
   status: "active" | "completed" | "exited_attested" | "exited_voluntary";
   purchaseTx: ChainTxRef;

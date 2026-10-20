@@ -1,6 +1,7 @@
 // Owner: R3 (roles.md).
 // GET|POST /api/cron/chain-sync (architecture §11.1, job `chain-sync`). Protected by CRON_SECRET.
-// Mock escrow: a recorded no-op. REINS_ESCROW=chain: 501 until the indexer exists (R3-09).
+// Mock escrow: a recorded no-op. REINS_ESCROW=chain: indexes PrepaidEscrow logs into
+// prepaid_plans / prepaid_sessions (architecture §24.6); 501 if the chain env is incomplete.
 // The job lives in src/server/cron/chain-sync.ts (shared with POST /api/admin/run-now).
 
 import { connection } from "next/server";
