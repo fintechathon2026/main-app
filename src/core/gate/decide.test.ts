@@ -3,7 +3,7 @@ import type { GateSnapshot, Origin, PrepaidFacts, TypedAction } from "../types";
 import { LIN_MANDATE_V3 } from "../mandate/examples";
 import { decide } from "./decide";
 import { medianMadCheck } from "./anomaly";
-import { PREPAID_RULE_IDS } from "./rule-ids";
+import { PREPAID_PATH_RULE_IDS, PREPAID_RULE_IDS, SHARED_RULE_IDS } from "./rule-ids";
 
 const NOW = "2026-10-17T08:00:00.000Z";
 const OWNER = "0x1111111111111111111111111111111111111111";
@@ -658,10 +658,25 @@ describe("decide: prepaid (architecture §24.9)", () => {
       for (const row of [...rows, ...extraRows]) expect(listed.has(row.rule), row.name).toBe(true);
     });
 
-    it("decide emits no prepaid.* id that is missing from the list", () => {
-      const listed = new Set<string>(PREPAID_RULE_IDS);
-      const unlisted = [...traceIds([...rows, ...extraRows])].filter((id) => id.startsWith("prepaid.") && !listed.has(id));
-      expect(unlisted).toEqual([]);
+    // A redeem under a snapshot per-payee cap: the only way a prepaid trace gets that id.
+    const perPayee = () =>
+      decide(redeem(), snap({ prepaid: user(), caps: { dailyUsed: 0, dailyCap: 1000, perPayeeCap: 100, perPayeeUsed: 0 } })).trace.map((x) => x.ruleId);
+    const allSeen = () => new Set([...traceIds([...rows, ...extraRows]), ...perPayee()]);
+
+    it("every shared id is listed once and is not also a prepaid id", () => {
+      expect(new Set(SHARED_RULE_IDS).size).toBe(SHARED_RULE_IDS.length);
+      for (const id of SHARED_RULE_IDS) expect(PREPAID_RULE_IDS as readonly string[]).not.toContain(id);
+    });
+
+    it("every shared id appears in at least one prepaid trace", () => {
+      const seen = allSeen();
+      expect(SHARED_RULE_IDS.filter((id) => !seen.has(id))).toEqual([]);
+    });
+
+    // Checks every id, not just a prefix: a new rule in decide.ts must be added to rule-ids.ts.
+    it("decide emits no id in a prepaid trace that is missing from the lists", () => {
+      const listed = new Set<string>(PREPAID_PATH_RULE_IDS);
+      expect([...allSeen()].filter((id) => !listed.has(id))).toEqual([]);
     });
   });
 });
