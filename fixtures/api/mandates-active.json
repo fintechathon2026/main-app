@@ -1,0 +1,56 @@
+{
+  "version": 3,
+  "hash": "a0c8a833bed61df58b6d087be768c0b546353e68f081ec199666853d902a9f72",
+  "signedAt": "2026-10-12T06:20:00.000Z",
+  "createdVia": "nl",
+  "policy": {
+    "version": 3,
+    "base_currency": "CNY",
+    "fx": {
+      "rate_source": "ecb_reference",
+      "margin_pct": 3
+    },
+    "payees": {
+      "allow": [
+        "SZ_POWER",
+        "CHINA_MOBILE",
+        "LANDLORD_WANG"
+      ],
+      "new_payee": "deny"
+    },
+    "bills": {
+      "auto_pay_max": 300,
+      "anomaly": {
+        "method": "median_mad",
+        "k": 3,
+        "min_history": 3
+      },
+      "pay_days_before_due": 2
+    },
+    "subscriptions": {
+      "cancel": "confirm",
+      "subscribe": "deny",
+      "renewal_notice_days": 5,
+      "renew_unseen_price_increase": "confirm",
+      "auto_cancel_trials": {
+        "enabled": true,
+        "days_before_charge": 1,
+        "notify_days_before": 3
+      }
+    },
+    "prepaid": {
+      "purchase": "confirm",
+      "escrow_only": true,
+      "max_prepay": 8000,
+      "auto_exit_on": [
+        "court_enforcement",
+        "closure_notice"
+      ],
+      "attestation_max_age_days": 2,
+      "warn_on_soft_signals": true
+    },
+    "global": {
+      "daily_outflow_cap": 1000
+    }
+  }
+}

@@ -4,6 +4,7 @@
 // `tsc` if the mirror and the TypeScript types drift apart.
 
 import { z } from "zod";
+import { policySchema } from "@/src/core/mandate/schema";
 import type * as T from "@/src/server/api-types";
 
 export const iso = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
@@ -43,7 +44,23 @@ export const FeedWhyResponse = z.strictObject({
   checks: z.array(FeedCheck),
 });
 
-export const AuditVerifyRow = z.strictObject({
+export const MandateActiveResponse = z.strictObject({
+  version: z.number().int().positive(),
+  hash: hash64,
+  signedAt: iso,
+  createdVia: z.enum(["nl", "template", "edit"]),
+  policy: policySchema,
+});
+export const MandateVersion = z.strictObject({
+  version: z.number().int().positive(),
+  signedAt: iso,
+  change: z.string().min(1),
+  direction: z.enum(["less", "more", "first"]).nullable(),
+  status: z.enum(["active", "superseded", "revoked"]),
+});
+export const MandateHistoryResponse = z.array(MandateVersion);
+
+export const AuditVerifyRow =z.strictObject({
   seq: z.number().int().positive(),
   at: iso,
   event: z.string().min(1),
@@ -70,6 +87,9 @@ export type Checks = [
   Assert<Equal<z.infer<typeof FeedItem>, T.FeedItem>>,
   Assert<Equal<z.infer<typeof FeedResponse>, T.FeedResponse>>,
   Assert<Equal<z.infer<typeof FeedWhyResponse>, T.FeedWhyResponse>>,
+  Assert<Equal<z.infer<typeof MandateActiveResponse>, T.MandateActiveResponse>>,
+  Assert<Equal<z.infer<typeof MandateVersion>, T.MandateVersion>>,
+  Assert<Equal<z.infer<typeof MandateHistoryResponse>, T.MandateHistoryResponse>>,
   Assert<Equal<z.infer<typeof AuditVerifyRow>, T.AuditVerifyRow>>,
   Assert<Equal<z.infer<typeof AuditVerifyResponse>, T.AuditVerifyResponse>>,
 ];

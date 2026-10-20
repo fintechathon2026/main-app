@@ -1,0 +1,23 @@
+[
+  {
+    "version": 3,
+    "signedAt": "2026-10-12T06:20:00.000Z",
+    "change": "Added rules for prepaid packages",
+    "direction": "more",
+    "status": "active"
+  },
+  {
+    "version": 2,
+    "signedAt": "2026-10-05T10:02:00.000Z",
+    "change": "Auto-pay limit lowered from ¥500 to ¥300",
+    "direction": "less",
+    "status": "superseded"
+  },
+  {
+    "version": 1,
+    "signedAt": "2026-10-01T09:15:00.000Z",
+    "change": "First rules signed",
+    "direction": "first",
+    "status": "superseded"
+  }
+]
