@@ -236,7 +236,8 @@ describe("POST /api/mandates/compile", () => {
     expect(out.policy.payees.new_payee).toBe("deny"); // unmentioned -> most restrictive
     expect(out.defaulted).toContain("payees.new_payee");
     expect(out.readback[0]).toBe("Pay bills automatically up to CNY 200 each; larger or unusual bills need your approval.");
-    expect(Object.keys(out).sort()).toEqual(["baseCurrency", "defaulted", "policy", "readback"]);
+    expect(Object.keys(out).sort()).toEqual(["baseCurrency", "changes", "defaulted", "policy", "readback", "relation"]);
+    expect(out).toMatchObject({ relation: "first", changes: [] }); // the mocked repo has no active mandate
   });
 
   it("answers 422 when the model's draft breaks the schema, and for whitespace-only text", async () => {

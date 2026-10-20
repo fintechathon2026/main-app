@@ -249,8 +249,9 @@ export type MandateVersion = {
   /** One plain sentence built from the difference between this and the previous policy. */
   change: string;
   /**
-   * Less or more permission than the previous version. null = not classified yet: the live route
-   * returns null until compareMandates (src/core/mandate/narrow.ts) is wired in.
+   * Less or more permission than the previous version, from compareMandates
+   * (src/core/mandate/narrow.ts): narrowing = "less", widening or incomparable (mixed) = "more",
+   * "first" for the first version. null = equivalent: nothing changed in permission.
    */
   direction: "less" | "more" | "first" | null;
   status: "active" | "superseded" | "revoked";
@@ -265,13 +266,50 @@ export type MandateCompileRequest = { text: string };
  * A draft only: nothing is saved, signed or activated by this route. `readback` is generated from
  * `policy` by templates (never model text); `defaulted` lists fields the user did not mention,
  * which took their most restrictive value. The policy has no `version`: activation assigns it.
- * TODO(R2): add the diff against the active mandate and its less/more class (compareMandates).
+ * `relation` and `changes` compare the draft with the active mandate (compareMandates); signing
+ * a widening or incomparable change needs the review (`confirmWidening`).
  */
 export type MandateCompileResponse = {
   baseCurrency: "CNY" | "IDR";
   policy: DraftPolicy;
   defaulted: string[];
   readback: string[];
+  relation: MandateChangeRelation;
+  changes: MandateFieldChange[];
+};
+
+// ---- R2: POST /api/mandates/activate -------------------------------------------------------
+
+/** How a new version compares with the active one. "first" = there was no active mandate. */
+export type MandateChangeRelation = "first" | "narrowing" | "widening" | "equivalent" | "incomparable";
+/** One changed field (dotted policy path) and what the change does to the agent's permission. */
+export type MandateFieldChange = { path: string; direction: "narrower" | "wider" | "incomparable" };
+
+/**
+ * Body for POST /api/mandates/activate: the compile route's draft (no version). The server
+ * recomputes defaults, version, hash and the change class; `confirmWidening` is required for a
+ * widening or incomparable change.
+ */
+export type MandateActivateRequest = {
+  policy: DraftPolicy;
+  /** How the policy was produced: natural-language compile, a template, or a direct edit. */
+  createdVia: "nl" | "template" | "edit";
+  confirmWidening?: boolean;
+};
+
+/** 201 from POST /api/mandates/activate: the new active version. */
+export type MandateActivateResponse = {
+  version: number;
+  hash: string;
+  signedAt: string;
+  relation: MandateChangeRelation;
+};
+
+/** 409 from POST /api/mandates/activate when a widening change was sent without review. */
+export type MandateActivateConflict = ApiError & {
+  code: "widening_needs_review";
+  relation: MandateChangeRelation;
+  changes: MandateFieldChange[];
 };
 
 // ---- R2: GET /api/audit/verify ------------------------------------------------------------
