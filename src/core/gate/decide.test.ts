@@ -919,3 +919,34 @@ describe("decide: determinism", () => {
     expect(decide(pay(612, "SZ_POWER"), s)).toEqual(decide(pay(612, "SZ_POWER"), s));
   });
 });
+
+describe("decide: per-payee cap with prototype-named payee ids", () => {
+  const allow = (p: Record<string, unknown>, id: string) => {
+    (p.payees as { allow: string[] }).allow.push(id);
+  };
+  it.each(["constructor", "toString", "__proto__"])("payee id %s still hits the snapshot cap", (id) => {
+    // No own policy entry for the id: an inherited lookup would yield a function/object, make
+    // Math.min NaN and silently skip the snapshot cap. The cap of 50 must deny a 98 payment.
+    const s = snap(
+      { payee: { billerId: id, inRegistry: true, verified: true }, caps: { dailyUsed: 0, dailyCap: 1000, perPayeeCap: 50, perPayeeUsed: 0 } },
+      (p) => {
+        allow(p, id);
+        (p.global as Record<string, unknown>).per_payee_daily_cap = { CHINA_MOBILE: 150 };
+      },
+    );
+    const r = decide(pay(98, id), s);
+    expect(r.decision).toBe("deny");
+    expect(r.ruleIds).toContain("global.per_payee_daily_cap");
+  });
+  // "__proto__" is excluded here: parsePolicy (zod record) drops an own "__proto__" key, so such
+  // a cap never reaches the Gate. That is a schema matter, outside this lookup fix.
+  it.each(["constructor", "toString"])("an own policy cap for payee id %s applies", (id) => {
+    const s = snap({ payee: { billerId: id, inRegistry: true, verified: true } }, (p) => {
+      allow(p, id);
+      (p.global as Record<string, unknown>).per_payee_daily_cap = JSON.parse(`{"${id}": 50}`);
+    });
+    const r = decide(pay(98, id), s);
+    expect(r.decision).toBe("deny");
+    expect(r.ruleIds).toContain("global.per_payee_daily_cap");
+  });
+});

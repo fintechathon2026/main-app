@@ -485,7 +485,9 @@ function monotoneIfNarrows(s: Scenario): void {
 
 // ---- (a) narrowing monotonicity -------------------------------------------------------------
 
-describe("narrowing monotonicity: decide(p') is never more permissive than decide(p)", () => {
+// Thousands of generated runs per property: slower than the 5 s default when the whole suite runs
+// in parallel, so these tests get an explicit budget.
+describe("narrowing monotonicity: decide(p') is never more permissive than decide(p)", { timeout: 60_000 }, () => {
   it("holds for every field (mixed tools, prepaid fields included)", () => {
     fc.assert(fc.property(scenarioArb, monotone), { numRuns: 4000 });
   });

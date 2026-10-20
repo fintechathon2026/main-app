@@ -181,18 +181,21 @@ describe("conformalCheck", () => {
     });
   });
 
-  // Known weaknesses, kept as documented expected failures (see the R2 report). The mandate
-  // schema (alpha in the open interval (0, 1)) keeps both unreachable from decide().
-  describe("known gaps", () => {
-    it.fails("floating-point ceil: alpha 0.42, n = 49 must use rank 29, not 30", () => {
+  // Former known gaps, now fixed. The mandate schema (alpha in the open interval (0, 1))
+  // keeps both unreachable from decide(), but conformalCheck fails closed regardless.
+  describe("former known gaps", () => {
+    it("floating-point ceil: alpha 0.42, n = 49 must use rank 29, not 30", () => {
       // 50 * (1 - 0.42) = 29.000000000000004, so a plain Math.ceil gives 30. The detectors
       // version subtracts 1e-9 first. Spec rank 29 gives q = 14, so |x - m| = 15 is anomalous.
       const h = Array.from({ length: 49 }, (_, i) => i + 1); // median 25
       expect(conformalCheck(40, h, 0.42).anomalous).toBe(true);
     });
-    it.fails("alpha >= 1 must not silently pass everything", () => {
+    it("alpha >= 1 must not silently pass everything", () => {
       // rank = 0, so scores[-1] is undefined and `score > undefined` is false.
       expect(conformalCheck(1_000_000, H9, 1).anomalous).toBe(true);
+    });
+    it.each([0, -0.1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("invalid alpha %s fails closed", (alpha) => {
+      expect(conformalCheck(1_000_000, H9, alpha)).toMatchObject({ anomalous: true, reason: "insufficient_history" });
     });
   });
 });
