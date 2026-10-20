@@ -7,6 +7,27 @@ const settlementAdapters = {
   group: ["@/src/server/adapters/settlement", "@/src/server/adapters/settlement/**", "**/adapters/settlement/**"],
   message: "Only src/server/executor/** may import settlement adapters (G1).",
 };
+
+// Private-key reads: docs/architecture.md §5.1. Chain keys belong to the chain adapter, simulator
+// keys to src/sim. The three file groups below are disjoint, so no block overrides another.
+const chainKeys = ["RELAYER_PRIVATE_KEY", "AGENT_PRIVATE_KEY"];
+const simKeys = ["MERCHANT_SIM_PRIVATE_KEY", "ORACLE_PRIVATE_KEY", "TOKEN_MINTER_PRIVATE_KEY"];
+const keyReadGlobs = ["**/*.{ts,tsx,js,jsx,mjs,cjs}"];
+const keyReadExempt = ["tests/**", "**/*.test.{ts,tsx,js,jsx,mjs,cjs}"];
+const chainDir = "src/server/adapters/settlement/chain/**";
+const simDir = "src/sim/**";
+
+/** no-restricted-syntax selectors for reading any of `keys`: a.X, a["X"], and const { X } = a. */
+function keyReadSelectors(keys, where) {
+  const re = `/^(${keys.join("|")})$/`;
+  const message = `${keys.join(", ")} may be read only in ${where} (architecture §5.1).`;
+  return [
+    `MemberExpression[computed=false][property.name=${re}]`,
+    `MemberExpression[computed=true][property.value=${re}]`,
+    `ObjectPattern > Property[key.name=${re}]`,
+    `ObjectPattern > Property[key.value=${re}]`,
+  ].map((selector) => ({ selector, message }));
+}
 const ioModules = ["pg", "@supabase/*", "@langchain/*", "@anthropic-ai/*", "viem", "unpdf"];
 
 const eslintConfig = defineConfig([
@@ -59,6 +80,24 @@ const eslintConfig = defineConfig([
         },
       ],
     },
+  },
+  {
+    // Everywhere except the chain adapter and src/sim: no key may be read.
+    files: keyReadGlobs,
+    ignores: [...keyReadExempt, chainDir, simDir],
+    rules: { "no-restricted-syntax": ["error", ...keyReadSelectors(chainKeys, chainDir), ...keyReadSelectors(simKeys, simDir)] },
+  },
+  {
+    // src/sim may read simulator keys, not chain keys.
+    files: [simDir],
+    ignores: keyReadExempt,
+    rules: { "no-restricted-syntax": ["error", ...keyReadSelectors(chainKeys, chainDir)] },
+  },
+  {
+    // The chain adapter may read chain keys, not simulator keys.
+    files: [chainDir],
+    ignores: keyReadExempt,
+    rules: { "no-restricted-syntax": ["error", ...keyReadSelectors(simKeys, simDir)] },
   },
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "contracts/**", ".claude/**", ".data/**", "supabase/.temp/**"]),
 ]);
