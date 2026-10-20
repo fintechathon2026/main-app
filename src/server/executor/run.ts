@@ -10,6 +10,7 @@ import type { ActionExecutorPort, ExecResult, GateResult } from "@/src/core/type
 import { decide } from "@/src/core/gate/decide";
 import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
+import { assertGateNotDisabled } from "@/src/server/platform/eval-guard";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { chainEscrowFromEnv } from "@/src/server/adapters/settlement/chain/escrow";
@@ -93,6 +94,7 @@ function defaultEscrow(transport: MockbankTransport | undefined): EscrowAdapter 
 }
 
 export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
+  assertGateNotDisabled(process.env); // I-04: a production process must not run with the Gate off
   const settlement = deps.settlement ?? createMockbankSettlement({ transport: deps.transport });
   const escrow = deps.escrow ?? defaultEscrow(deps.transport);
 
