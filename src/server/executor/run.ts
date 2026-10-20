@@ -6,11 +6,11 @@
 //   Phase C  settle outside any transaction with the action's idempotency key, then finalize
 //            succeeded / failed (definitive) / unknown (reconcile decides later).
 
-import type { ActionExecutorPort, ExecResult, GateResult } from "@/src/core/types";
+import type { ActionExecutorPort, ExecResult, GateResult, GateSnapshot, TypedAction } from "@/src/core/types";
 import { decide } from "@/src/core/gate/decide";
 import { withUserTx } from "@/src/server/db/pool";
 import { appendAudit } from "@/src/server/audit";
-import { assertGateNotDisabled } from "@/src/server/platform/eval-guard";
+import { assertGateNotDisabled, evalGateDisabledAllowed } from "@/src/server/platform/eval-guard";
 import { consumeApproval, createApprovalTx, expireOpenApprovalsFor } from "@/src/server/approvals";
 import { createMockbankSettlement, createMockEscrow, type MockbankTransport } from "@/src/server/adapters/settlement/mockbank";
 import { chainEscrowFromEnv } from "@/src/server/adapters/settlement/chain/escrow";
@@ -48,11 +48,36 @@ function executorDeny(gate: GateResult, ruleId: string): GateResult {
   };
 }
 
+/** Rule id and audit event of eval arm A (PRD §20.3): the Gate was not consulted. */
+export const EVAL_GATE_DISABLED = "eval.gate_disabled";
+const EVAL_GATE_DISABLED_EVENT = "executor.eval_gate_disabled";
+
+/**
+ * Arm A's stand-in for decide(): allow everything, without approvals or cap accounting. Only
+ * reachable through `evalDisableGate`, which createExecutor refuses outside eval processes.
+ */
+function evalAllowAll(_action: TypedAction, snap: GateSnapshot): GateResult {
+  return {
+    decision: "allow",
+    ruleIds: [EVAL_GATE_DISABLED],
+    reasons: [EVAL_GATE_DISABLED],
+    mandateVersion: snap.mandate?.version ?? 0,
+    mandateHash: snap.mandate?.hash ?? "",
+    amountBase: 0,
+    trace: [{ ruleId: EVAL_GATE_DISABLED, result: "allow", reason: EVAL_GATE_DISABLED }],
+  };
+}
+
 export type ExecutorDeps = {
   settlement?: SettlementAdapter;
   escrow?: EscrowAdapter;
   /** In-process transport for the default mock bank adapters (tests). */
   transport?: MockbankTransport;
+  /**
+   * Eval arm A only (PRD §20.3, I-04): replace decide() with allow-all and skip approvals.
+   * Throws unless REINS_EVAL_DISABLE_GATE is set in a non-deployed process.
+   */
+  evalDisableGate?: boolean;
 };
 
 export type ActionExecutor = ActionExecutorPort & {
@@ -95,6 +120,11 @@ function defaultEscrow(transport: MockbankTransport | undefined): EscrowAdapter 
 
 export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
   assertGateNotDisabled(process.env); // I-04: a production process must not run with the Gate off
+  if (deps.evalDisableGate && !evalGateDisabledAllowed(process.env)) {
+    throw new Error("evalDisableGate needs REINS_EVAL_DISABLE_GATE in a non-deployed eval process (G1, I-04).");
+  }
+  const gateDisabled = deps.evalDisableGate === true;
+  const gateDecide = gateDisabled ? evalAllowAll : decide;
   const settlement = deps.settlement ?? createMockbankSettlement({ transport: deps.transport });
   const escrow = deps.escrow ?? defaultEscrow(deps.transport);
 
@@ -142,7 +172,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
       }
 
       const snap = await buildSnapshot(tx, cur, ctx, facts);
-      const gate = decide(typedAction(cur), snap);
+      const gate = gateDecide(typedAction(cur), snap);
       // The attestation the decision used; settlement passes exactly this one (never re-selects).
       const attestationId = snap.prepaid?.attestation?.id ?? null;
       await appendAudit(tx, userId, {
@@ -150,6 +180,13 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
         eventType: "decision",
         data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash, result: gate, ...(attestationId ? { attestationId } : {}) },
       });
+      if (gateDisabled) {
+        await appendAudit(tx, userId, {
+          actor: "system",
+          eventType: EVAL_GATE_DISABLED_EVENT,
+          data: { actionId, tool: cur.tool, phase: "execute", argsHash: cur.args_hash },
+        });
+      }
 
       // PRD §10.6: mandate changed since planning and the decision changed -> cancel, re-plan.
       if (snap.mandate && cur.mandate_version !== snap.mandate.version && cur.preview_decision && gate.decision !== cur.preview_decision) {
@@ -430,7 +467,7 @@ export function createExecutor(deps: ExecutorDeps = {}): ActionExecutor {
     const facts = await phaseA(userId, action, escrow);
     return withUserTx(userId, async (tx) => {
       const ctx = await userCtx(tx, userId);
-      const gate = decide(typedAction(action), await buildSnapshot(tx, action, ctx, facts));
+      const gate = gateDecide(typedAction(action), await buildSnapshot(tx, action, ctx, facts));
       const next = gate.decision === "allow" ? "ready" : gate.decision === "require_confirm" ? "awaiting_approval" : null;
       await tx.query(
         `update public.actions set preview_decision = $2, rule_ids = $3, gate_json = $4,

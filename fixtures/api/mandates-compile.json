@@ -76,5 +76,60 @@
     "Prepaid packages: buy never, up to CNY 0, escrow only.",
     "Never exit a prepaid plan automatically.",
     "Foreign amounts are converted at the ECB reference rate plus 10% before checking limits."
+  ],
+  "relation": "incomparable",
+  "changes": [
+    {
+      "path": "fx.margin_pct",
+      "direction": "narrower"
+    },
+    {
+      "path": "payees.allow",
+      "direction": "narrower"
+    },
+    {
+      "path": "bills.auto_pay_max",
+      "direction": "narrower"
+    },
+    {
+      "path": "bills.anomaly.k",
+      "direction": "narrower"
+    },
+    {
+      "path": "bills.anomaly.min_history",
+      "direction": "narrower"
+    },
+    {
+      "path": "bills.pay_days_before_due",
+      "direction": "wider"
+    },
+    {
+      "path": "subscriptions.renewal_notice_days",
+      "direction": "wider"
+    },
+    {
+      "path": "subscriptions.auto_cancel_trials.enabled",
+      "direction": "narrower"
+    },
+    {
+      "path": "prepaid.purchase",
+      "direction": "narrower"
+    },
+    {
+      "path": "prepaid.max_prepay",
+      "direction": "narrower"
+    },
+    {
+      "path": "prepaid.auto_exit_on",
+      "direction": "narrower"
+    },
+    {
+      "path": "prepaid.attestation_max_age_days",
+      "direction": "narrower"
+    },
+    {
+      "path": "global.daily_outflow_cap",
+      "direction": "narrower"
+    }
   ]
 }

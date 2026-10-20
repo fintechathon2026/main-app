@@ -10,6 +10,8 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { ModelClients } from "@/src/agent/deps";
 import { GENESIS_HASH, auditHash } from "@/src/server/audit";
+import { hashPolicy } from "@/src/core/mandate/canonical";
+import { classifyChange, toStoredPolicy } from "@/src/server/mandate/activate";
 import { compile } from "@/src/server/mandate/compile";
 import { type AuditEntry, buildAuditVerify } from "@/src/server/db/read/audit-view";
 import { buildFeed, buildWhy } from "@/src/server/db/read/feed-view";
@@ -57,7 +59,6 @@ function chain(): AuditEntry[] {
 
 const COMPILE_TEXT = "Pay bills up to 200 yuan for SZ_POWER and CHINA_MOBILE. Never more than 500 a day. Ask me before cancelling.";
 
-const FIXTURE_DIRECTION: Record<number, "less" | "more"> = { 2: "less", 3: "more" };
 
 /** What the compiler model drafts for the sample text; compile() fills the rest and reads it back. */
 const COMPILE_DRAFT = {
@@ -69,18 +70,29 @@ const COMPILE_DRAFT = {
 const compileFixture = async (): Promise<unknown> => {
   const models = { mandate_compiler: { chat: async () => { throw new Error("unused"); }, structured: async () => COMPILE_DRAFT } } as unknown as Pick<ModelClients, "mandate_compiler">;
   const r = await compile(COMPILE_TEXT, { models, baseCurrency: "CNY" });
-  return { baseCurrency: "CNY", policy: r.policy, defaulted: r.defaulted, readback: r.readback };
+  // The diff against Lin's active v3, as the live compile route computes it.
+  const active = buildActive(LIN_MANDATE_ROWS.find((x) => x.status === "active")!);
+  const stored = toStoredPolicy(r.policy, active.version + 1);
+  if (!stored.ok) throw new Error(stored.errors.join("; "));
+  const { relation, changes } = classifyChange(active.policy, stored.policy);
+  return { baseCurrency: "CNY", policy: r.policy, defaulted: r.defaulted, readback: r.readback, relation, changes };
+};
+/** Signing the compile fixture over Lin's v3: version 4, hash of the stored form. */
+const activateFixture = async (): Promise<unknown> => {
+  const c = (await compileFixture()) as { policy: Parameters<typeof toStoredPolicy>[0]; relation: string };
+  const stored = toStoredPolicy(c.policy, 4);
+  if (!stored.ok) throw new Error(stored.errors.join("; "));
+  return { version: 4, hash: hashPolicy(stored.policy), signedAt: "2026-10-19T03:00:00.000Z", relation: c.relation };
 };
 
 async function generate(): Promise<Record<string, unknown>> {
   const entries = chain();
   return {
     "mandates-compile.json": await compileFixture(),
+    "mandates-activate.json": await activateFixture(),
     "audit-verify.json": buildAuditVerify({ ok: true, count: entries.length, firstBreakSeq: null }, entries, NOW),
     "mandates-active.json": buildActive(LIN_MANDATE_ROWS.find((r) => r.status === "active")!),
-    // TODO(R2): drop the override when buildHistory classifies with compareMandates
-    // (src/core/mandate/narrow.ts). Until then only the fixture shows less/more.
-    "mandates-history.json": buildHistory(LIN_MANDATE_ROWS).map((v) => ({ ...v, direction: FIXTURE_DIRECTION[v.version] ?? v.direction })),
+    "mandates-history.json": buildHistory(LIN_MANDATE_ROWS),
     "feed.json": buildFeed(LIN_FEED_ROWS),
     "feed-why.json": Object.fromEntries(LIN_FEED_ROWS.map((r) => [r.id, buildWhy(r)])),
   };
@@ -88,6 +100,7 @@ async function generate(): Promise<Record<string, unknown>> {
 
 const SCHEMAS: Record<string, z.ZodType> = {
   "mandates-compile.json": S.MandateCompileResponse,
+  "mandates-activate.json": S.MandateActivateResponse,
   "audit-verify.json": S.AuditVerifyResponse,
   "mandates-active.json": S.MandateActiveResponse,
   "mandates-history.json": S.MandateHistoryResponse,

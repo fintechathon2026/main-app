@@ -4,9 +4,8 @@
 // the read-back is generated from the policy by templates. Body is exactly {text}; the user comes
 // from the session. REINS_FIXTURES=1 serves fixtures/api/mandates-compile.json for any valid body.
 // With REINS_MODELS=recorded (the default) only texts that were recorded can be compiled; any other
-// text answers 503 model_unavailable.
-// TODO(R2): add the diff against the active mandate and its less/more class (compareMandates,
-// src/core/mandate/narrow.ts) once that branch lands.
+// text answers 503 model_unavailable. `relation` and `changes` compare the draft with the active
+// mandate (compareMandates, src/core/mandate/narrow.ts) so the sheet can show the diff.
 // No `runtime` export: cacheComponents is on, and Node is the default runtime.
 
 import { connection } from "next/server";
@@ -15,6 +14,8 @@ import { RecordingMissError, createModelClients } from "@/src/agent/models";
 import fixture from "@/fixtures/api/mandates-compile.json";
 import type { MandateCompileResponse } from "@/src/server/api-types";
 import { fixturesEnabled, jsonError, readRoute } from "@/src/server/db/read/http";
+import { loadActiveMandate } from "@/src/server/db/read/mandate-repo";
+import { classifyChange, toStoredPolicy } from "@/src/server/mandate/activate";
 import { MAX_MANDATE_TEXT, MandateCompileError, compile } from "@/src/server/mandate/compile";
 
 const Body = z.strictObject({ text: z.string().min(1).max(MAX_MANDATE_TEXT) });
@@ -71,7 +72,12 @@ export async function POST(req: Request): Promise<Response> {
       try {
         models ??= createModelClients();
         const r = await compile(body.data.text, { models, baseCurrency: base });
-        return { baseCurrency: base, policy: r.policy, defaulted: r.defaulted, readback: r.readback };
+        // The diff the sheet shows before signing. Activation recomputes it under its lock.
+        const active = await loadActiveMandate(d.userId);
+        const stored = toStoredPolicy(r.policy, (active?.version ?? 0) + 1);
+        if (!stored.ok) return jsonError(422, `compiled policy is not valid: ${stored.errors.join("; ")}`, "compile_failed");
+        const { relation, changes } = classifyChange(active?.policy ?? null, stored.policy);
+        return { baseCurrency: base, policy: r.policy, defaulted: r.defaulted, readback: r.readback, relation, changes };
       } catch (e) {
         if (e instanceof MandateCompileError) return jsonError(422, e.message, "compile_failed");
         if (e instanceof RecordingMissError) return jsonError(503, "no recorded model answer for this text", "model_unavailable");

@@ -67,6 +67,24 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // G6: the LLM never edits mandates. Only the user-signed route may activate one.
+    files: ["src/agent/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            settlementAdapters,
+            {
+              group: ["@/src/server/mandate/activate", "**/server/mandate/activate", "**/mandate/activate"],
+              message: "The agent must not activate mandates (G6).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/sim/**/*.ts"],
     rules: {
       "no-restricted-imports": [

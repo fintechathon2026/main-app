@@ -97,12 +97,33 @@ export const DraftPolicy = z.strictObject({
     expires_at: z.string().optional(),
   }),
 });
+export const MandateChangeRelation = z.enum(["first", "narrowing", "widening", "equivalent", "incomparable"]);
+export const MandateFieldChange = z.strictObject({ path: z.string().min(1), direction: z.enum(["narrower", "wider", "incomparable"]) });
 export const MandateCompileRequest = z.strictObject({ text: z.string().min(1).max(4000) });
 export const MandateCompileResponse = z.strictObject({
   baseCurrency: z.enum(["CNY", "IDR"]),
   policy: DraftPolicy,
   defaulted: z.array(z.string().min(1)),
   readback: z.array(z.string().min(1)).min(1),
+  relation: MandateChangeRelation,
+  changes: z.array(MandateFieldChange),
+});
+export const MandateActivateRequest = z.strictObject({
+  policy: DraftPolicy,
+  createdVia: z.enum(["nl", "template", "edit"]),
+  confirmWidening: z.boolean().optional(),
+});
+export const MandateActivateResponse = z.strictObject({
+  version: z.number().int().positive(),
+  hash: hash64,
+  signedAt: iso,
+  relation: MandateChangeRelation,
+});
+export const MandateActivateConflict = z.strictObject({
+  error: z.string().min(1),
+  code: z.literal("widening_needs_review"),
+  relation: MandateChangeRelation,
+  changes: z.array(MandateFieldChange),
 });
 
 export const AuditVerifyRow = z.strictObject({
@@ -137,6 +158,9 @@ export type Checks = [
   Assert<Equal<z.infer<typeof MandateHistoryResponse>, T.MandateHistoryResponse>>,
   Assert<Equal<z.infer<typeof MandateCompileRequest>, T.MandateCompileRequest>>,
   Assert<Equal<z.infer<typeof MandateCompileResponse>, T.MandateCompileResponse>>,
+  Assert<Equal<z.infer<typeof MandateActivateRequest>, T.MandateActivateRequest>>,
+  Assert<Equal<z.infer<typeof MandateActivateResponse>, T.MandateActivateResponse>>,
+  Assert<Equal<z.infer<typeof MandateActivateConflict>, T.MandateActivateConflict>>,
   Assert<Equal<z.infer<typeof AuditVerifyRow>, T.AuditVerifyRow>>,
   Assert<Equal<z.infer<typeof AuditVerifyResponse>, T.AuditVerifyResponse>>,
 ];

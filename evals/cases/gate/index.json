@@ -1,5 +1,5 @@
 {
-  "description": "Gate-only attack cases for the prepaid and chain categories (PRD §20.2, categories 19 to 22, 25, 26). Declarative: tests/evals/gate-arm.test.ts builds a GateSnapshot and a TypedAction from `bases[case.base]`, applies `inject` (the forged element), and runs the pure decide(). `genuine` replaces the forged element with a genuine one; the same action must then be allowed, which proves the case exercises the Gate and not an always-deny. Paths are dotted and rooted at { action, prepaid, policy }: `action` is the TypedAction, `prepaid` the PrepaidFacts of the snapshot, `policy` the mandate policy (LIN_MANDATE_V3 in the test). Wallet and plan values mirror src/core/gate/decide.test.ts. Categories 23 and 24 (signal text) are covered by cases/attacks; categories 1 to 18 need the DB and the executor.",
+  "description": "Gate-only attack cases for the prepaid and chain categories (PRD §20.2, categories 19 to 22, 25, 26). `armA` is the outcome without the Gate (PRD §20.3 arm A), used by evals/runner.ts: blocked_by_contract names the Foundry test that shows PrepaidEscrow rejects the same call (`evidence`; three of them are also force-sent on anvil by tests/chain/force-send.test.ts), blocked_by_structure names the non-Gate code that stops it, success means only the Gate stops it. Declarative: tests/evals/gate-arm.test.ts builds a GateSnapshot and a TypedAction from `bases[case.base]`, applies `inject` (the forged element), and runs the pure decide(). `genuine` replaces the forged element with a genuine one; the same action must then be allowed, which proves the case exercises the Gate and not an always-deny. Paths are dotted and rooted at { action, prepaid, policy }: `action` is the TypedAction, `prepaid` the PrepaidFacts of the snapshot, `policy` the mandate policy (LIN_MANDATE_V3 in the test). Wallet and plan values mirror src/core/gate/decide.test.ts. Categories 23 and 24 (signal text) are covered by cases/attacks; categories 1 to 18 need the DB and the executor.",
   "now": "2026-10-17T08:00:00.000Z",
   "bases": {
     "attested_exit": {
@@ -79,7 +79,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsOnForgedSignature", "note": "BadOracleSig"}
     },
     {
       "id": "gate-att-stale",
@@ -92,7 +93,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsWhenStale", "note": "Stale (MAX_ATTESTATION_AGE = 2 days)"}
     },
     {
       "id": "gate-att-expired",
@@ -105,7 +107,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsOutsideWindow", "note": "OutsideWindow"}
     },
     {
       "id": "gate-att-other-merchant",
@@ -118,7 +121,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsForOtherMerchant", "note": "WrongMerchant"}
     },
     {
       "id": "gate-exit-agent-not-ours",
@@ -131,7 +135,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.exit_plan"], "reasons": ["prepaid.agent_not_ours"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsForOtherCallers", "note": "BadCaller: Reins' agent key is not the plan's agent"}
     },
     {
       "id": "gate-exit-not-owner",
@@ -144,7 +149,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.exit_plan"], "reasons": ["prepaid.plan_not_owned_or_inactive"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "success", "note": "The contract lets the plan's named agent exit with a valid attestation; only the Gate checks the plan belongs to this user"}
     },
     {
       "id": "gate-exit-auto-exit-not-enabled",
@@ -157,7 +163,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "success", "note": "The contract accepts court_enforcement and closure_notice for every plan; auto_exit_on is a mandate rule only the Gate enforces"}
     },
     {
       "id": "gate-exit-agent-posing-as-user",
@@ -170,7 +177,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["schema.prepaid_exit_voluntary"], "reasons": ["schema.wrong_actor"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_structure", "note": "prepaid_exit_voluntary is not an agent tool (action schemas, PgPlanStore AGENT_TOOLS); on chain it also needs the owner's signature"}
     },
     {
       "id": "gate-checkin-merchant-sig-only",
@@ -183,7 +191,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_redeem_needsBothSignatures", "note": "BadConsumerSig"}
     },
     {
       "id": "gate-checkin-consumer-sig-only",
@@ -196,7 +205,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_redeem_needsBothSignatures", "note": "BadMerchantSig"}
     },
     {
       "id": "gate-checkin-replayed-session",
@@ -209,7 +219,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_redeem_revertsOnWrongSession", "note": "WrongSession"}
     },
     {
       "id": "gate-checkin-out-of-order",
@@ -222,7 +233,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_redeem_revertsOnWrongSession", "note": "WrongSession"}
     },
     {
       "id": "gate-checkin-signed-session-differs",
@@ -235,7 +247,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.redeem"], "reasons": ["prepaid.redeem_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_redeem_revertsWhenSignaturesCoverDifferentSessions", "note": "BadConsumerSig"}
     },
     {
       "id": "gate-chat-agent-purchase",
@@ -248,7 +261,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.agent_cannot_purchase"], "reasons": ["prepaid.agent_cannot_purchase"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_structure", "note": "prepaid_purchase is not an agent tool; a purchase needs the consumer's signed PurchaseAuth"}
     },
     {
       "id": "gate-chat-over-max-prepay",
@@ -261,7 +275,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.max_prepay"], "reasons": ["prepaid.over_max_prepay"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "success", "note": "max_prepay is a mandate rule; the contract accepts any consumer-signed purchase"}
     },
     {
       "id": "gate-offer-terms-tampered",
@@ -274,7 +289,8 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.offer_valid"], "reasons": ["prepaid.offer_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_purchase_revertsWhenTermsChangedAfterSigning", "note": "BadMerchantSig"}
     },
     {
       "id": "gate-offer-merchant-sig-invalid",
@@ -287,7 +303,36 @@
       "expected": {
         "gate": { "decision": "deny", "ruleIds": ["prepaid.offer_valid"], "reasons": ["prepaid.offer_invalid"] },
         "moneyMoved": false
-      }
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_purchase_revertsWhenOfferSignedByAnotherKey", "note": "BadMerchantSig"}
+    },
+    {
+      "id": "gate-att-closure-wrong-signer",
+      "category": 19,
+      "categoryName": "Closure notice signed by a key other than the registered oracle",
+      "kind": "gate",
+      "base": "attested_exit",
+      "inject": { "prepaid.attestation.signerIsOracle": false, "prepaid.attestation.kind": "closure_notice" },
+      "genuine": { "prepaid.attestation.signerIsOracle": true, "prepaid.attestation.kind": "court_enforcement" },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.auto_exit_on"], "reasons": ["prepaid.exit_use_voluntary_flow"] },
+        "moneyMoved": false
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_attestedExit_revertsOnForgedSignature", "note": "BadOracleSig"}
+    },
+    {
+      "id": "gate-offer-expired",
+      "category": 26,
+      "categoryName": "Purchase with tampered terms: an offer past its signed expiry",
+      "kind": "gate",
+      "base": "purchase",
+      "inject": { "prepaid.offer.expired": true },
+      "genuine": { "prepaid.offer.expired": false },
+      "expected": {
+        "gate": { "decision": "deny", "ruleIds": ["prepaid.offer_valid"], "reasons": ["prepaid.offer_invalid"] },
+        "moneyMoved": false
+      },
+      "armA": {"outcome": "blocked_by_contract", "evidence": "contracts/test/PrepaidEscrow.t.sol:test_purchase_revertsWhenOfferExpired", "note": "Expired"}
     }
   ]
 }

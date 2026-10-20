@@ -7,6 +7,8 @@
 // Send path, exactly once per action (§7.4):
 //   1. chain_txs row for the action exists -> re-broadcast the stored raw transaction (same hash)
 //   2. simulate + estimate gas; a revert returns `reverted` and sends nothing
+//      (eval only, EVAL_FORCE_SEND_REVERTS: skip this, send with FORCE_SEND_GAS_LIMIT, so the
+//      revert is mined and recorded as on-chain evidence)
 //   3. one user transaction: lock chain_nonces row, nonce = max(next, pending count), sign,
 //      insert chain_txs (signed), advance next_nonce; any failure rolls back (no nonce gap)
 //   4. broadcast; 5. wait for the receipt (timeout -> `pending`, never a second send)
@@ -14,6 +16,7 @@
 import {
   BaseError,
   ContractFunctionRevertedError,
+  decodeFunctionData,
   encodeFunctionData,
   keccak256,
   parseEventLogs,
@@ -24,6 +27,7 @@ import {
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { z } from "zod";
 import { withUserTx } from "@/src/server/db/pool";
+import { evalForceSendReverts, isDeployed } from "@/src/server/platform/eval-guard";
 import { PREPAID_ESCROW_ABI } from "@/src/server/chain/abi";
 import { chainConfigFromEnv, publicClientFor, readChainPlan, type ChainConfig } from "@/src/server/chain/client";
 import { toOfferMessage, toPurchaseAuthMessage } from "@/src/server/chain/types";
@@ -57,7 +61,15 @@ export type ChainEscrowConfig = ChainConfig & {
   receiptTimeoutMs?: number;
   /** Tests: inject a client (e.g. anvil). */
   publicClient?: PublicClient;
+  /**
+   * Eval only (architecture §24.5, EVAL_FORCE_SEND_REVERTS): skip simulation and send with
+   * FORCE_SEND_GAS_LIMIT, so attacks are mined as reverted transactions. Refused when deployed.
+   */
+  forceSendReverts?: boolean;
 };
+
+/** Gas limit of a force-sent transaction (no estimate exists for a call that reverts). */
+export const FORCE_SEND_GAS_LIMIT = BigInt(500_000);
 
 const KEY = /^0x[0-9a-fA-F]{64}$/;
 
@@ -109,9 +121,27 @@ export function createChainEscrow(cfg: ChainEscrowConfig): ChainEscrowAdapter {
     // The Gate checks plan.agent against AGENT_ADDRESS; a different key would only produce BadCaller reverts.
     throw new Error("chain escrow: AGENT_ADDRESS does not match AGENT_PRIVATE_KEY");
   }
+  if (cfg.forceSendReverts && isDeployed(process.env)) {
+    throw new Error("chain escrow: force-sending reverts is for eval runs only, not a deployed environment");
+  }
+  const forceSend = cfg.forceSendReverts === true;
   const client = cfg.publicClient ?? publicClientFor(cfg);
   const escrow = cfg.escrowAddress;
   const timeout = cfg.receiptTimeoutMs ?? 30_000;
+
+  /** The revert reason of a mined transaction: the same call replayed on the state before its block. */
+  async function minedRevertReason(hash: Hex, blockNumber: bigint): Promise<string | null> {
+    const tx = await client.getTransaction({ hash });
+    if (!tx.to) return null;
+    const { functionName, args } = decodeFunctionData({ abi: PREPAID_ESCROW_ABI, data: tx.input });
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replays any escrow function
+      await client.simulateContract({ address: tx.to, abi: PREPAID_ESCROW_ABI, functionName, args, account: tx.from, blockNumber: blockNumber - BigInt(1) } as any);
+      return null;
+    } catch (e) {
+      return revertReason(e);
+    }
+  }
 
   async function result(hash: Hex): Promise<ChainResult | null> {
     const receipt = await client.getTransactionReceipt({ hash }).catch(() => null);
@@ -120,7 +150,8 @@ export function createChainEscrow(cfg: ChainEscrowConfig): ChainEscrowAdapter {
       const events = parseEventLogs({ abi: PREPAID_ESCROW_ABI, logs: receipt.logs }).map((l) => ({ event: l.eventName, args: jsonSafe(l.args) }));
       return { status: "confirmed", txHash: hash, blockNumber: receipt.blockNumber, events };
     }
-    return { status: "reverted", txHash: hash, reason: "execution_reverted" };
+    const reason = await minedRevertReason(hash, receipt.blockNumber).catch(() => null);
+    return { status: "reverted", txHash: hash, reason: reason ?? "execution_reverted" };
   }
 
   async function settleRow(userId: string, actionId: string, hash: Hex): Promise<ChainResult> {
@@ -177,16 +208,21 @@ export function createChainEscrow(cfg: ChainEscrowConfig): ChainEscrowAdapter {
       return settleRow(o.userId, o.actionId, existing.tx_hash);
     }
 
-    // 2. Simulate: a revert here sends nothing (and spends no gas).
+    // 2. Simulate: a revert here sends nothing (and spends no gas). Force-send skips it.
     const call = { address: escrow, abi: PREPAID_ESCROW_ABI, functionName: fn, args, account } as const;
     let gas: bigint;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args are built per function below
-      gas = await client.estimateContractGas(call as any);
-    } catch (e) {
-      const reason = revertReason(e);
-      if (reason) return { status: "reverted", txHash: null, reason };
-      throw new SettlementError("chain_rpc_unavailable", true, String(e)); // nothing was signed or sent
+    if (forceSend) {
+      gas = FORCE_SEND_GAS_LIMIT;
+    } else {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args are built per function below
+        const estimate = await client.estimateContractGas(call as any);
+        gas = (estimate * BigInt(12)) / BigInt(10); // 20% headroom over the estimate
+      } catch (e) {
+        const reason = revertReason(e);
+        if (reason) return { status: "reverted", txHash: null, reason };
+        throw new SettlementError("chain_rpc_unavailable", true, String(e)); // nothing was signed or sent
+      }
     }
     const fees = await client.estimateFeesPerGas().catch((e) => {
       throw new SettlementError("chain_rpc_unavailable", true, String(e));
@@ -207,7 +243,7 @@ export function createChainEscrow(cfg: ChainEscrowConfig): ChainEscrowAdapter {
         to: escrow,
         data,
         nonce,
-        gas: (gas * BigInt(12)) / BigInt(10), // 20% headroom over the estimate
+        gas,
         maxFeePerGas: fees.maxFeePerGas,
         maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
       });
@@ -327,6 +363,7 @@ export function chainEscrowFromEnv(env: Record<string, string | undefined> = pro
     relayerKey: (process.env.RELAYER_PRIVATE_KEY ?? "").trim() as Hex,
     agentKey: (process.env.AGENT_PRIVATE_KEY ?? "").trim() as Hex,
     expectedAgentAddress: env.AGENT_ADDRESS,
+    forceSendReverts: evalForceSendReverts(env),
     receiptTimeoutMs: env.CHAIN_RECEIPT_TIMEOUT_MS ? Number(env.CHAIN_RECEIPT_TIMEOUT_MS) : undefined,
   });
 }
