@@ -1,3 +1,4 @@
+import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { conformalCheck, mad, median, medianMadCheck } from "./anomaly";
 
@@ -197,5 +198,38 @@ describe("conformalCheck", () => {
     it.each([0, -0.1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])("invalid alpha %s fails closed", (alpha) => {
       expect(conformalCheck(1_000_000, H9, alpha)).toMatchObject({ anomalous: true, reason: "insufficient_history" });
     });
+  });
+});
+
+// For alpha = p / 100 the spec rank ceil((n + 1)(100 - p) / 100) can be computed exactly in
+// integers. The float version must pick the same order statistic for every n and p, including
+// products that land a hair above an integer (p = 42, n = 49).
+describe("conformalCheck rank matches an exact integer reference", () => {
+  const exactRank = (n: number, p: number) => Math.floor(((n + 1) * (100 - p) + 99) / 100);
+  it("for every n in 1..200 and alpha in 0.01..0.99", () => {
+    for (let n = 1; n <= 200; n++) {
+      const h = Array.from({ length: n }, (_, i) => i + 1);
+      const m = median(h);
+      const scores = h.map((x) => Math.abs(x - m)).sort((a, b) => a - b);
+      for (let p = 1; p <= 99; p++) {
+        const rank = exactRank(n, p);
+        const r = conformalCheck(m, h, p / 100);
+        if (rank > n) {
+          expect(r, `n=${n} p=${p}`).toMatchObject({ anomalous: true, reason: "insufficient_history" });
+        } else {
+          expect(r.q, `n=${n} p=${p}`).toBe(scores[rank - 1]);
+        }
+      }
+    }
+  });
+  it("boundary: |x - m| = q passes, anything strictly above fails", () => {
+    fc.assert(
+      fc.property(fc.array(fc.integer({ min: 0, max: 1000 }), { minLength: 20, maxLength: 60 }), fc.integer({ min: 5, max: 50 }), (h, p) => {
+        const r = conformalCheck(0, h, p / 100);
+        if (r.q === undefined || r.median === undefined) return;
+        expect(conformalCheck(r.median + r.q, h, p / 100).anomalous).toBe(false);
+        expect(conformalCheck(r.median + r.q + 0.5, h, p / 100).anomalous).toBe(true);
+      }),
+    );
   });
 });
