@@ -2,12 +2,16 @@
 
 // Your rules (docs/ui-direction.md §8): the signed mandate as plain sentences, its version
 // history, and a way to ask for a change. Every sentence is generated from the policy fields,
-// never from AI text. Data: GET /api/mandates/active and /history (R2, not built yet), so the
-// screen shows Lin's seeded mandate (LIN_MANDATE_V3) as sample data until they land.
+// never from AI text. Data: GET /api/mandates/active (the signed policy) and /history. Changes go
+// through POST /api/mandates/compile, which returns a read-back only; there is no activate route
+// yet, so the sheet cannot sign a change.
 
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr";
 import { useState } from "react";
-import { LIN_MANDATE_V3 } from "@/src/core/mandate/examples";
+import activeFixture from "@/fixtures/api/mandates-active.json";
+import historyFixture from "@/fixtures/api/mandates-history.json";
+import type { Policy } from "@/src/core/mandate/schema";
+import type { MandateActiveResponse, MandateCompileResponse, MandateHistoryResponse, MandateVersion } from "@/src/server/api-types";
 import { SignOutButton } from "../auth/sign-out";
 import { postJson, useApi } from "../data";
 import { dateTime, formatMoney } from "../format";
@@ -16,10 +20,9 @@ import { PageHeader } from "../components/page";
 import { Button, StatusBadge } from "../components/primitives";
 import { SourceInfo } from "../components/source";
 import { ErrorState, SkeletonList } from "../components/states";
-import { SAMPLE_MANDATE_HISTORY, type MandateVersion } from "../sample";
 import type { Status } from "../words";
 
-type Mandate = typeof LIN_MANDATE_V3;
+type Mandate = Policy;
 type Rule = { text: string; does: Status; id: string };
 
 // Registry ids -> names (from the biller registry in Lin's seed).
@@ -37,14 +40,16 @@ function rulesOf(m: Mandate): { title: string; rules: Rule[] }[] {
     {
       title: "Who can get paid",
       rules: [
-        { id: "payees.allow", does: "done", text: `Money only goes to: ${m.payees.allow.map((p) => PAYEE_NAMES[p] ?? p).join(", ")}.` },
+        { id: "payees.allow", does: "done", text: m.payees.allow.length ? `Money only goes to: ${m.payees.allow.map((p) => PAYEE_NAMES[p] ?? p).join(", ")}.` : "No payees are saved yet, so no money can go out." },
         { id: "payees.new_payee", does: m.payees.new_payee === "deny" ? "blocked" : "ask", text: m.payees.new_payee === "deny" ? "Reins never adds a new payee. Only you can, in your saved payees." : "New payees need your OK." },
       ],
     },
     {
       title: "Bills",
       rules: [
-        { id: "bills.auto_pay_max", does: "done", text: `Bills up to ${cny(m.bills.auto_pay_max)} are paid for you, ${m.bills.pay_days_before_due} days before they are due.` },
+        m.bills.auto_pay_max > 0
+          ? { id: "bills.auto_pay_max", does: "done" as const, text: `Bills up to ${cny(m.bills.auto_pay_max)} are paid for you, ${m.bills.pay_days_before_due} days before they are due.` }
+          : { id: "bills.auto_pay_max", does: "ask" as const, text: "No bill is paid without your OK." },
         { id: "bills.over_auto_pay_max", does: "ask", text: `Bills over ${cny(m.bills.auto_pay_max)} wait for your OK.` },
         { id: "bills.anomaly", does: "ask", text: "A bill that looks unusual compared with your last ones waits for your OK." },
       ],
@@ -53,7 +58,7 @@ function rulesOf(m: Mandate): { title: string; rules: Rule[] }[] {
       title: "Subscriptions",
       rules: [
         { id: "subscriptions.cancel", does: m.subscriptions.cancel === "confirm" ? "ask" : "blocked", text: m.subscriptions.cancel === "confirm" ? "Cancelling a subscription needs your OK." : "Reins never cancels a subscription." },
-        { id: "subscriptions.subscribe", does: "blocked", text: "Reins never starts a new subscription." },
+        { id: "subscriptions.subscribe", does: m.subscriptions.subscribe === "deny" ? "blocked" : "ask", text: m.subscriptions.subscribe === "deny" ? "Reins never starts a new subscription." : "Starting a subscription needs your OK." },
         { id: "subscriptions.renewal_notice_days", does: "done", text: `You get a reminder ${m.subscriptions.renewal_notice_days} days before each renewal.` },
         { id: "subscriptions.renew_unseen_price_increase", does: "ask", text: "A price rise you have not seen needs your OK before it renews." },
         ...(trials.enabled
@@ -64,10 +69,14 @@ function rulesOf(m: Mandate): { title: string; rules: Rule[] }[] {
     {
       title: "Prepaid packages",
       rules: [
-        { id: "prepaid.purchase", does: "ask", text: "Only you can buy a package, and it needs your OK." },
-        { id: "prepaid.escrow_only", does: "blocked", text: "Paying ahead is only allowed when the money is held safely until you use it." },
+        { id: "prepaid.purchase", does: m.prepaid.purchase === "deny" ? "blocked" : "ask", text: m.prepaid.purchase === "deny" ? "Packages cannot be bought through Reins." : "Only you can buy a package, and it needs your OK." },
+        ...(m.prepaid.escrow_only
+          ? [{ id: "prepaid.escrow_only", does: "blocked" as const, text: "Paying ahead is only allowed when the money is held safely until you use it." }]
+          : []),
         { id: "prepaid.max_prepay", does: "ask", text: `Up to ${cny(m.prepaid.max_prepay)} can be paid ahead in total.` },
-        { id: "prepaid.auto_exit_on", does: "done", text: `If there is ${kinds} about the business, Reins takes your unused money back for you. The notice must be less than ${m.prepaid.attestation_max_age_days} days old, and the money can only go back to you.` },
+        m.prepaid.auto_exit_on.length
+          ? { id: "prepaid.auto_exit_on", does: "done" as const, text: `If there is ${kinds} about the business, Reins takes your unused money back for you. The notice must be less than ${m.prepaid.attestation_max_age_days} days old, and the money can only go back to you.` }
+          : { id: "prepaid.auto_exit_on", does: "ask" as const, text: "Reins never leaves a package on its own. You decide." },
         ...(m.prepaid.warn_on_soft_signals
           ? [{ id: "prepaid.warn_on_soft_signals", does: "suggest" as const, text: "Early warning signs, like more complaints, are shown to you. Reins does not act on them." }]
           : []),
@@ -84,27 +93,27 @@ function rulesOf(m: Mandate): { title: string; rules: Rule[] }[] {
 }
 
 export function RulesScreen() {
-  const history = useApi<MandateVersion[]>("/api/mandates/history", SAMPLE_MANDATE_HISTORY);
+  const active = useApi<MandateActiveResponse>("/api/mandates/active", activeFixture as MandateActiveResponse);
+  const history = useApi<MandateHistoryResponse>("/api/mandates/history", historyFixture as MandateHistoryResponse);
   const [editing, setEditing] = useState(false);
 
-  if (history.state === "loading") return <SkeletonList rows={6} />;
+  if (active.state === "loading" || history.state === "loading") return <SkeletonList rows={6} />;
+  if (active.state === "error") return <ErrorState onRetry={active.retry} />;
   if (history.state === "error") return <ErrorState onRetry={history.retry} />;
 
-  const m = LIN_MANDATE_V3;
-  const current = history.data[0];
+  const current = active.data;
+  const m = current.policy;
   const groups = rulesOf(m);
 
   return (
     <>
       <PageHeader
         title="Your rules"
-        sample={history.sample}
+        sample={active.sample || history.sample}
         sub={
-          current ? (
-            <>
-              Version <span className="amount">{current.version}</span>, signed by you on {dateTime(current.signedAt)}
-            </>
-          ) : undefined
+          <>
+            Version <span className="amount">{current.version}</span>, signed by you on {dateTime(current.signedAt)}
+          </>
         }
       >
         <Button variant="outline" onClick={() => setEditing(true)}>
@@ -152,7 +161,7 @@ export function RulesScreen() {
             <div className="lg:hidden">
               <h2 className="px-1 pb-2 text-[17px] font-semibold">Change history</h2>
               <div className="rounded-card border border-line bg-surface p-4">
-                <History versions={history.data} />
+                <History versions={history.data} activeVersion={current.version} />
               </div>
               <div className="mt-6 flex justify-center">
                 <SignOutButton />
@@ -161,7 +170,7 @@ export function RulesScreen() {
           </div>
           <aside className="hidden lg:block" aria-label="Change history">
             <div className="sticky top-8 rounded-card border border-line bg-surface p-6">
-              <History versions={history.data} />
+              <History versions={history.data} activeVersion={current.version} />
             </div>
           </aside>
       </div>
@@ -171,24 +180,24 @@ export function RulesScreen() {
   );
 }
 
-function History({ versions }: { versions: MandateVersion[] }) {
+function History({ versions, activeVersion }: { versions: MandateVersion[]; activeVersion: number }) {
   return (
     <div>
       <h2 className="hidden text-[17px] font-semibold lg:block">Change history</h2>
       <ol className="mt-2 space-y-4 lg:mt-4">
-        {versions.map((v, i) => (
+        {versions.map((v) => (
           <li key={v.version} className="relative pl-6">
             <span
-              className={`absolute left-0 top-1.5 size-2.5 rounded-full ${i === 0 ? "bg-ink" : "bg-line"}`}
+              className={`absolute left-0 top-1.5 size-2.5 rounded-full ${v.version === activeVersion ? "bg-ink" : "bg-line"}`}
               aria-hidden
             />
             <p className="text-[15px] font-semibold">
               Version <span className="amount">{v.version}</span>
-              {i === 0 && <span className="ml-2 text-[13px] font-normal text-muted">current</span>}
+              {v.version === activeVersion && <span className="ml-2 text-[13px] font-normal text-muted">current</span>}
             </p>
             <p className="text-[14px]">{v.change}</p>
             <p className="text-[13px] text-muted">
-              {v.direction === "less" ? "Less permission, applied right away. " : v.direction === "more" ? "More permission, signed after a review. " : ""}
+              {v.direction === "less" ? "Less permission. " : v.direction === "more" ? "More permission. " : ""}
               {dateTime(v.signedAt)}
             </p>
           </li>
@@ -201,16 +210,28 @@ function History({ versions }: { versions: MandateVersion[] }) {
 function ChangeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [text, setText] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "failed">("idle");
+  const [draft, setDraft] = useState<MandateCompileResponse | null>(null);
 
   async function check() {
     setState("busy");
-    const r = await postJson("/api/mandates/compile", { text });
-    // The read-back and diff view lands with the compile route (R2). Until then, say so.
-    setState(r.ok ? "idle" : "failed");
+    setDraft(null);
+    const r = await postJson<MandateCompileResponse>("/api/mandates/compile", { text });
+    if (r.ok) {
+      setDraft(r.data);
+      setState("idle");
+    } else {
+      setState("failed");
+    }
+  }
+
+  function close() {
+    setDraft(null);
+    setState("idle");
+    onClose();
   }
 
   return (
-    <BottomSheet open={open} onClose={onClose} label="Change your rules" className="lg:[&>[role=dialog]]:inset-x-auto lg:[&>[role=dialog]]:left-1/2 lg:[&>[role=dialog]]:bottom-auto lg:[&>[role=dialog]]:top-1/2 lg:[&>[role=dialog]]:w-[520px] lg:[&>[role=dialog]]:-translate-x-1/2 lg:[&>[role=dialog]]:-translate-y-1/2 lg:[&>[role=dialog]]:rounded-card">
+    <BottomSheet open={open} onClose={close} label="Change your rules" className="lg:[&>[role=dialog]]:inset-x-auto lg:[&>[role=dialog]]:left-1/2 lg:[&>[role=dialog]]:bottom-auto lg:[&>[role=dialog]]:top-1/2 lg:[&>[role=dialog]]:w-[520px] lg:[&>[role=dialog]]:-translate-x-1/2 lg:[&>[role=dialog]]:-translate-y-1/2 lg:[&>[role=dialog]]:rounded-card">
       <h2 className="text-[20px] font-semibold">Change your rules</h2>
       <p className="mt-1 text-[15px] text-muted">
         Write the change in your own words. Reins reads it back to you as rules before you sign. Nothing changes until you sign.
@@ -221,25 +242,49 @@ function ChangeSheet({ open, onClose }: { open: boolean; onClose: () => void }) 
       <textarea
         id="rule-change"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setDraft(null);
+        }}
         rows={4}
+        maxLength={4000}
         placeholder="For example: pay bills under ¥200 without asking"
         className="mt-2 w-full rounded-field border border-line bg-page p-3 text-[16px] placeholder:text-muted focus:border-ink lg:text-[15px] focus:outline-none"
       />
-      <p className="mt-2 text-[13px] text-muted">
-        Giving Reins less permission applies right after you sign. Giving it more permission needs a 10 second review first.
-      </p>
       {state === "failed" && (
         <p role="alert" className="mt-4 rounded-field bg-stop-bg px-3 py-2 text-[14px] text-stop">
-          Reins could not read this change yet. Your rules did not change.
+          Reins could not read this change. Your rules did not change.
         </p>
       )}
+
+      {draft && (
+        <section aria-labelledby="readback-h" className="mt-5 rounded-field border border-line bg-page p-4">
+          <h3 id="readback-h" className="text-[15px] font-semibold">
+            Read back: the full rules this would sign
+          </h3>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[14px] leading-relaxed">
+            {draft.readback.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+          {draft.defaulted.length > 0 && (
+            <p className="mt-3 text-[13px] text-muted">
+              You did not mention <span className="amount">{draft.defaulted.length}</span> settings, so they take their safest value
+              (never, or ask you first).
+            </p>
+          )}
+          <p className="mt-3 rounded-field bg-sunken px-3 py-2 text-[13px]">
+            Signing a new version is not available yet. Your current rules stay in force.
+          </p>
+        </section>
+      )}
+
       <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <Button variant="quiet" onClick={onClose}>
-          Cancel
+        <Button variant="quiet" onClick={close}>
+          {draft ? "Close" : "Cancel"}
         </Button>
         <Button onClick={check} disabled={text.trim().length < 3 || state === "busy"}>
-          Read it back to me
+          {state === "busy" ? "Reading…" : draft ? "Read it again" : "Read it back to me"}
         </Button>
       </div>
     </BottomSheet>
