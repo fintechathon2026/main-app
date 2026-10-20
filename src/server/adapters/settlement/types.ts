@@ -36,7 +36,11 @@ export type ChainResult =
   | { status: "reverted"; txHash: string | null; reason: string }
   | { status: "pending"; txHash: string };
 
-export type EscrowSendOpts = { actionId: string; idempotencyKey: string };
+/**
+ * `userId` scopes the chain adapter's chain_txs writes (RLS). The mock escrow ignores it; the
+ * chain adapter refuses to send without it (`escrow_user_missing`).
+ */
+export type EscrowSendOpts = { actionId: string; idempotencyKey: string; userId?: string };
 
 /** Contract (or mock escrow) plan state, read at decision time. Amounts in fen. */
 export type EscrowPlanState = {
