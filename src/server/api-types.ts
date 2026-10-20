@@ -4,6 +4,7 @@
 
 import type { Policy } from "@/src/core/mandate/schema";
 import type { Origin } from "@/src/core/types";
+import type { Policy as DraftPolicy } from "@/src/server/mandate/schema";
 
 export type Money = { amount: number; currency: string };
 /** A foreign amount with its base-currency equivalent and rate date (PRD FR18.4). */
@@ -251,6 +252,22 @@ export type MandateVersion = {
 };
 /** Newest first, like the Rules screen's stand-in. */
 export type MandateHistoryResponse = MandateVersion[];
+
+// ---- R2: POST /api/mandates/compile ----------------------------------------------------------
+
+export type MandateCompileRequest = { text: string };
+/**
+ * A draft only: nothing is saved, signed or activated by this route. `readback` is generated from
+ * `policy` by templates (never model text); `defaulted` lists fields the user did not mention,
+ * which took their most restrictive value. The policy has no `version`: activation assigns it.
+ * TODO(R2): add the diff against the active mandate and its less/more class (compareMandates).
+ */
+export type MandateCompileResponse = {
+  baseCurrency: "CNY" | "IDR";
+  policy: DraftPolicy;
+  defaulted: string[];
+  readback: string[];
+};
 
 // ---- R2: GET /api/audit/verify ------------------------------------------------------------
 
