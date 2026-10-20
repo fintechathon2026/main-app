@@ -5,7 +5,7 @@
 // that needs an OK is a link to the approval card, which is built by the server, never from
 // streamed text.
 
-import { ArrowLeft, ArrowUp, HandPalm } from "@phosphor-icons/react/dist/ssr";
+import { ArrowLeft, ArrowUp, HandPalm, Paperclip, X } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -33,12 +33,35 @@ const NODE_TEXT: Record<string, string> = {
   explain: "Writing a short explanation",
 };
 
+type Attachment = { documentId: string; name: string };
+
 export function ChatScreen() {
   const params = useSearchParams();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState(() => params.get("ask") ?? "");
   const [busy, setBusy] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  async function attachFile(file: File) {
+    setUploading(true);
+    setUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const r = await fetch("/api/ingest/upload", { method: "POST", body: form });
+      const body = (await r.json().catch(() => null)) as { documentId?: string; error?: string } | null;
+      if (!r.ok || !body?.documentId) throw new Error(body?.error ?? String(r.status));
+      setAttachments((a) => [...a, { documentId: body.documentId!, name: file.name }]);
+    } catch {
+      setUploadError("Could not attach that file. PDFs only, up to 10 MB.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
@@ -55,14 +78,16 @@ export function ChatScreen() {
   async function send(text: string) {
     const message = text.trim();
     if (!message || busy) return;
+    const documentIds = attachments.map((a) => a.documentId);
     setInput("");
+    setAttachments([]);
     setBusy(true);
     setMsgs((m) => [...m, { role: "user", text: message }, { role: "agent", text: "", status: null, approval: false, error: null, done: false }]);
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, ...(documentIds.length ? { documentIds } : {}) }),
       });
       if (!r.ok || !r.body) throw new Error(String(r.status));
       const reader = r.body.getReader();
@@ -149,39 +174,80 @@ export function ChatScreen() {
         <div ref={end} />
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send(input);
-        }}
-        className="sticky bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5rem)] mt-6 flex items-end gap-2 rounded-card border border-line bg-surface p-2 shadow-pop lg:bottom-6"
-      >
-        <label htmlFor="chat-input" className="sr-only">
-          Message
-        </label>
-        <textarea
-          id="chat-input"
-          rows={1}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send(input);
-            }
+      <div className="sticky bottom-[calc(max(0.75rem,env(safe-area-inset-bottom))+5rem)] mt-6 lg:bottom-6">
+        {(attachments.length > 0 || uploading || uploadError) && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a) => (
+              <span key={a.documentId} className="flex items-center gap-1.5 rounded-full border border-line bg-surface py-1.5 pr-1.5 pl-3 text-[13px]">
+                {a.name}
+                <button
+                  type="button"
+                  onClick={() => setAttachments((all) => all.filter((x) => x.documentId !== a.documentId))}
+                  aria-label={`Remove ${a.name}`}
+                  className="grid size-6 place-items-center rounded-full hover:bg-sunken"
+                >
+                  <X size={14} aria-hidden />
+                </button>
+              </span>
+            ))}
+            {uploading && <span className="rounded-full border border-line bg-surface px-3 py-1.5 text-[13px] text-muted">Attaching…</span>}
+            {uploadError && <span className="rounded-field bg-stop-bg px-3 py-1.5 text-[13px] text-stop">{uploadError}</span>}
+          </div>
+        )}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send(input);
           }}
-          placeholder="Ask about your money"
-          className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-[16px] placeholder:text-muted focus:outline-none lg:text-[15px]"
-        />
-        <button
-          type="submit"
-          disabled={!input.trim() || busy}
-          aria-label="Send"
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-page disabled:opacity-30"
+          className="flex items-end gap-2 rounded-card border border-line bg-surface p-2 shadow-pop"
         >
-          <ArrowUp size={20} weight="bold" aria-hidden />
-        </button>
-      </form>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) attachFile(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            disabled={uploading || busy}
+            aria-label="Attach a PDF bill"
+            className="grid size-11 shrink-0 place-items-center rounded-full text-muted hover:bg-sunken disabled:opacity-30"
+          >
+            <Paperclip size={20} aria-hidden />
+          </button>
+          <label htmlFor="chat-input" className="sr-only">
+            Message
+          </label>
+          <textarea
+            id="chat-input"
+            rows={1}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(input);
+              }
+            }}
+            placeholder="Ask about your money"
+            className="max-h-40 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-[16px] placeholder:text-muted focus:outline-none lg:text-[15px]"
+          />
+          <button
+            type="submit"
+            disabled={!input.trim() || busy}
+            aria-label="Send"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-page disabled:opacity-30"
+          >
+            <ArrowUp size={20} weight="bold" aria-hidden />
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
