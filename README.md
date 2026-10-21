@@ -8,6 +8,8 @@
 
 FinTechathon 2026, International Track, Topic A (Personal Finance Assistant). Demo persona: Lin, a renter in Shenzhen, in CNY.
 
+**Live demo:** https://reins-fintechathon.vercel.app — sign in with any email to get a magic link; see [how to demo it](#how-to-demo-it) below for the full walkthrough.
+
 <p align="center">
   <img src="docs/screenshots/desktop-home-light.png" alt="Reins Home on a laptop: what is due, what needs your OK" width="640">
   <img src="docs/screenshots/mobile-home-light.png" alt="Reins Home on a phone" width="170">
@@ -121,7 +123,7 @@ We want you to know exactly what you are looking at.
 | AI agent (reader, planner, explainer) | Built; the demo can replay recorded model answers (`REINS_MODELS=recorded`), so it runs without an API key |
 | Bank | **Simulated** (`/mockbank`), a separate service with its own database role |
 | Merchant and official-notice registry | **Simulated** (`src/sim/`), each signs with its own key |
-| Prepaid escrow | **Mocked by default** (`REINS_ESCROW=mock`). The Solidity contract (`contracts/`) and the chain adapter (`REINS_ESCROW=chain`) are built and tested with Foundry and a local chain. They are **not deployed to Base Sepolia yet** (test token, no value) |
+| Prepaid escrow | **Mocked by default on the live demo** (`REINS_ESCROW=mock`, so repeated demo runs don't spend testnet gas). The Solidity contract (`contracts/`) and the chain adapter (`REINS_ESCROW=chain`) are built, tested with Foundry and a local chain, and **deployed to Base Sepolia** — see [Escrow contract](#escrow-contract) below for the live addresses and transaction hashes |
 | Buying, check-in and leaving early from the browser | Built. The browser makes the key and signs; the server never sees it. Works on the mock escrow; the simulated gym tablet is at `/sim/tablet` |
 | Passkey signing of the mandate | Not built yet; today the stored mandate is checked by its hash |
 | Attack results with and without the rule check | Cases are in `evals/`; the numbers are still being produced |
@@ -137,11 +139,11 @@ pnpm dev
 
 Put the values that `pnpm exec supabase start` prints (database URLs, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`) into `.env.local` (see `.env.example`). Then sign in as the seeded user Lin: enter `lin@demo.reins.local` on the sign in page and open the link from the local mail inbox at http://127.0.0.1:54324. With a session, approving, declining and cancelling work against the real routes.
 
-We have tested the routes and the executor against a local database, but the browser sign in against a real Supabase project has not been tried end to end yet. If it gives trouble, the quick mode above still shows every screen. For API calls without the browser, `REINS_DEMO_AUTH=1` accepts an `x-demo-user: <user id>` header (never in production).
+We have tested the routes and the executor against a local database, and the browser sign in against a real, hosted Supabase project is what the live demo at https://reins-fintechathon.vercel.app runs on. If a local run gives trouble, the quick mode above still shows every screen. For API calls without the browser, `REINS_DEMO_AUTH=1` accepts an `x-demo-user: <user id>` header (never in production).
 
 ## Deploy (Vercel and a hosted Supabase project)
 
-Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** for the app and **Supabase** (supabase.com) for the database. The plan is in [`docs/architecture.md`](docs/architecture.md) §19. The deploy is not final yet (task R3-16), so treat these steps as the checklist, not a record of what ran.
+Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** for the app and **Supabase** (supabase.com) for the database. The plan is in [`docs/architecture.md`](docs/architecture.md) §19. This is a record of what was actually done for the live deployment at https://reins-fintechathon.vercel.app, not just a checklist.
 
 1. **Supabase project.** Create one (the demo project). Note the project ref, the database password, the project URL and the anon key.
 2. **Apply the migrations.** From the repo: `pnpm exec supabase link --project-ref <ref>`, then `pnpm exec supabase db push`. Never edit a migration that was already applied; add a new file.
@@ -160,14 +162,29 @@ Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** 
 | Mock bank and simulators | `MOCKBANK_API_KEY`, `MOCKBANK_DATABASE_URL`, `MOCKBANK_URL` and `SIM_BASE_URL` (both must be the deployed URL, not `localhost`), `SIM_API_KEY` |
 | Cron | `CRON_SECRET` |
 | Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, `CHAIN_LOG_CHUNK` (`10` on Alchemy Free tier), and the chain keys listed in `.env.example` |
+| Document uploads | `REINS_DOCUMENTS_BUCKET` (defaults to `documents`) and `REINS_STORAGE_READ_TOKEN`, a JWT for a dedicated read-only role so the Reader job can fetch uploaded PDFs with no user session — see [`docs/submission/storage-read-token-setup.md`](docs/submission/storage-read-token-setup.md) |
 
 **Do not set these on a deployed site:** `REINS_FIXTURES` (serves fixture data without a session; ignored when `VERCEL_ENV=production`), `REINS_DEMO_AUTH`, `MOCKBANK_ENABLE_TEST_ROUTES`, `REINS_DEMO_TABLET` and `REINS_EVAL_DISABLE_GATE` (the app refuses to build an executor with it in production).
 
+## How to demo it
+
+Open https://reins-fintechathon.vercel.app, sign in with any email address (it gets a magic link; no password), and open the link.
+
+The live deployment runs `REINS_MODELS=live`, so Reins answers in its own words — you are not limited to a fixed script. A ready-to-follow, under-5-minute walkthrough (sign in → a document attack gets blocked → a normal payment auto-pays while an anomalous one asks for your OK → a prepaid exit is refused without proof and allowed with it → the kill switch → the audit trail) is in [`docs/submission/demo-video-script.md`](docs/submission/demo-video-script.md), including the exact prompts to type at each step.
+
 ## Escrow contract
 
-The contract (`PrepaidEscrow`) and the test token (`TestCNY`) are in [`contracts/`](contracts/). Build, test and the local rehearsal are in [`contracts/README.md`](contracts/README.md), which also has the Base Sepolia deploy steps. The rehearsal on a local chain prints three transaction hashes (purchase, check-in, attested exit).
+The contract (`PrepaidEscrow`) and the test token (`TestCNY`) are in [`contracts/`](contracts/). Build, test and the local rehearsal are in [`contracts/README.md`](contracts/README.md), which also has the Base Sepolia deploy steps.
 
-**Deployed addresses (Base Sepolia, chain 84532):** pending. The deploy has not been run, so `contracts/deployments/84532.json` does not exist yet. When it does, the addresses, the deploy block and the three transaction hashes with Basescan links go here and in `docs/evidence/`.
+**Deployed addresses (Base Sepolia, chain 84532)**, from `contracts/deployments/84532.json` (deploy block 48356082):
+
+| Contract | Address |
+|---|---|
+| PrepaidEscrow | [`0xcf9e41a7891339D5229B2e3744d80Fe63B7337d0`](https://sepolia.basescan.org/address/0xcf9e41a7891339D5229B2e3744d80Fe63B7337d0) |
+| TestCNY (tCNY, no value) | [`0x7218ACcba071865e31eA60CA740Dd8d0568587F1`](https://sepolia.basescan.org/address/0x7218ACcba071865e31eA60CA740Dd8d0568587F1) |
+| Oracle (registry signer) | [`0x280F4572D9f816d6019834B9c94cA826318aBB6A`](https://sepolia.basescan.org/address/0x280F4572D9f816d6019834B9c94cA826318aBB6A) |
+
+The full purchase → redeem → attested-exit lifecycle has been run on this contract, both as an isolated spike and end to end through the app (Lin's FitBox plan: bought, checked in 12 times, then exited after an oracle-signed closure notice). Every transaction hash with its Basescan link is in [`docs/evidence/spike.md`](docs/evidence/spike.md).
 
 The contract is a testnet demo with a valueless token and is **not audited**. See [`docs/submission/security-self-assessment.md`](docs/submission/security-self-assessment.md).
 
@@ -191,7 +208,10 @@ pnpm exec playwright test          # browser flows on a production build
 | [`docs/submission/core-algorithms.md`](docs/submission/core-algorithms.md) | Detection, advice and summary algorithms |
 | [`docs/submission/injection-defenses.md`](docs/submission/injection-defenses.md) | How untrusted text is kept away from money |
 | [`docs/submission/security-self-assessment.md`](docs/submission/security-self-assessment.md) | Permission tiers, guarantees and known risks |
+| [`docs/submission/execution-evidence.md`](docs/submission/execution-evidence.md) | Proof the demos actually ran: real Base Sepolia transactions and sandbox logs |
 | [`docs/submission/ux-design.md`](docs/submission/ux-design.md) | The screens, wording and accessibility |
+| [`docs/submission/demo-video-script.md`](docs/submission/demo-video-script.md) | The live-demo walkthrough: steps, timing and exact prompts |
+| [`docs/evidence/spike.md`](docs/evidence/spike.md) | Every Base Sepolia transaction hash with its Basescan link |
 | [`docs/ui-direction.md`](docs/ui-direction.md) | Look, words and layout rules |
 
 ## Repository map
