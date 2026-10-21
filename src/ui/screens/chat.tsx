@@ -103,6 +103,7 @@ export function ChatScreen() {
           if (!line.trim()) continue;
           const ev = JSON.parse(line) as ChatStreamEvent;
           if (ev.type === "token") patchLast((m) => ({ ...m, text: m.text + ev.text }));
+          if (ev.type === "feed") patchLast((m) => ({ ...m, text: m.text + ev.text }));
           if (ev.type === "status") patchLast((m) => ({ ...m, status: NODE_TEXT[ev.node] ?? "Working" }));
           if (ev.type === "approval_required") patchLast((m) => ({ ...m, approval: true }));
           if (ev.type === "error") patchLast((m) => ({ ...m, error: "The agent is unavailable. No money was moved." }));
