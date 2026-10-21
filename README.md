@@ -145,7 +145,7 @@ Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** 
 
 1. **Supabase project.** Create one (the demo project). Note the project ref, the database password, the project URL and the anon key.
 2. **Apply the migrations.** From the repo: `pnpm exec supabase link --project-ref <ref>`, then `pnpm exec supabase db push`. Never edit a migration that was already applied; add a new file.
-3. **Demo data.** `supabase/seed.sql` loads the demo user Lin for local runs. Loading it into a hosted project has not been tried.
+3. **Demo data.** `supabase/seed.sql` loads the demo user Lin. On a hosted project, run it without its two `alter role ... password` lines (they are local passwords), then give `reins_server` and `reins_mockbank` login and strong passwords out of band and run `pnpm db:checkpointer`. The demo project was set up this way.
 4. **Sign in links.** In the Supabase dashboard (Authentication, URL configuration) add the deployed site URL and `<site>/auth/callback` to the redirect URLs. Without this, the email link does not work on the deployed site.
 5. **Vercel project.** Import the repo, set the Node version to **22.x** (the project default is newer), and add the variables below.
 6. **Checks after deploy.** Open the site, sign in, open Home, then try Pause everything. Run `pnpm test` and `pnpm exec playwright test` before tagging `demo-*`.
@@ -159,7 +159,7 @@ Local runs need only Docker. A hosted deployment needs two accounts: **Vercel** 
 | Agent | `ANTHROPIC_API_KEY`, `REINS_MODELS` (`recorded` replays saved answers and needs no live calls) |
 | Mock bank and simulators | `MOCKBANK_API_KEY`, `MOCKBANK_DATABASE_URL`, `MOCKBANK_URL` and `SIM_BASE_URL` (both must be the deployed URL, not `localhost`), `SIM_API_KEY` |
 | Cron | `CRON_SECRET` |
-| Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, and the chain keys listed in `.env.example` |
+| Escrow | `REINS_ESCROW` (`mock` or `chain`); for `chain`: `CHAIN_ID`, `BASE_SEPOLIA_RPC_URL`, `ESCROW_ADDRESS`, `TOKEN_ADDRESS`, `ORACLE_ADDRESS`, `AGENT_ADDRESS`, `CHAIN_START_BLOCK`, `CHAIN_LOG_CHUNK` (`10` on Alchemy Free tier), and the chain keys listed in `.env.example` |
 
 **Do not set these on a deployed site:** `REINS_FIXTURES` (serves fixture data without a session; ignored when `VERCEL_ENV=production`), `REINS_DEMO_AUTH`, `MOCKBANK_ENABLE_TEST_ROUTES`, `REINS_DEMO_TABLET` and `REINS_EVAL_DISABLE_GATE` (the app refuses to build an executor with it in production).
 

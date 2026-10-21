@@ -9,6 +9,7 @@ import type { Pool } from "pg";
 import { withUserTx } from "@/src/server/db/pool";
 import { PREPAID_ESCROW_ABI } from "./abi";
 import { readChainPlan, type ChainPlan } from "./client";
+import { scanLogRanges } from "./log-ranges";
 
 export type ChainSyncConfig = {
   client: PublicClient;
@@ -18,7 +19,13 @@ export type ChainSyncConfig = {
   /** First block to scan when there is no cursor yet (the deploy block). */
   startBlock: bigint;
   confirmations?: number;
+  /**
+   * Max blocks per getLogs request (inclusive bounds), default 2000. Shrunk automatically when
+   * the provider rejects the range (Alchemy Free tier: 10).
+   */
   chunk?: number;
+  /** Pause between getLogs requests in ms, for rate-limited providers. Default 0. */
+  logDelayMs?: number;
 };
 
 export type ChainSyncStats = {
@@ -55,15 +62,16 @@ async function writeCursor(pool: Pool, escrow: Address, block: bigint): Promise<
 }
 
 /** Purchase tx of a plan bought before the scanned range (first sync after a cursor reset). */
-async function findPurchaseTx(cfg: ChainSyncConfig, planId: bigint): Promise<Hex | null> {
-  const logs = await cfg.client.getContractEvents({
-    address: cfg.escrow,
-    abi: PREPAID_ESCROW_ABI,
-    eventName: "Purchased",
-    args: { planId },
-    fromBlock: cfg.startBlock,
+async function findPurchaseTx(cfg: ChainSyncConfig, planId: bigint, to: bigint, maxRange: number): Promise<Hex | null> {
+  const { items } = await scanLogRanges({
+    from: cfg.startBlock,
+    to,
+    maxRange,
+    delayMs: cfg.logDelayMs,
+    fetch: (fromBlock, toBlock) =>
+      cfg.client.getContractEvents({ address: cfg.escrow, abi: PREPAID_ESCROW_ABI, eventName: "Purchased", args: { planId }, fromBlock, toBlock }),
   });
-  return logs[0]?.transactionHash ?? null;
+  return items[0]?.transactionHash ?? null;
 }
 
 export async function runChainSync(pool: Pool, cfg: ChainSyncConfig): Promise<ChainSyncStats> {
@@ -94,24 +102,26 @@ export async function runChainSync(pool: Pool, cfg: ChainSyncConfig): Promise<Ch
   stats.fromBlock = from.toString();
   stats.toBlock = to.toString();
 
-  // 1. Logs, in chunks.
+  // 1. Logs, in chunks that cover [from, to] exactly once (shrunk if the RPC limits the range).
   const touched = new Map<bigint, PlanLogs>();
   const entry = (id: bigint) => {
     let e = touched.get(id);
     if (!e) touched.set(id, (e = { purchaseTx: null, sessions: [] }));
     return e;
   };
-  const chunk = BigInt(cfg.chunk ?? 2000);
-  for (let start = from; start <= to; start += chunk) {
-    const end = start + chunk - BigInt(1) < to ? start + chunk - BigInt(1) : to;
-    const logs = await cfg.client.getContractEvents({ address: cfg.escrow, abi: PREPAID_ESCROW_ABI, fromBlock: start, toBlock: end });
-    stats.logs += logs.length;
-    for (const log of logs) {
-      if (log.eventName === "Purchased") entry(log.args.planId!).purchaseTx = log.transactionHash;
-      else if (log.eventName === "Redeemed")
-        entry(log.args.planId!).sessions.push({ sessionNo: Number(log.args.sessionNo), txHash: log.transactionHash, blockNumber: log.blockNumber });
-      else if (log.eventName === "Exited") entry(log.args.planId!);
-    }
+  const { items: logs, maxRange } = await scanLogRanges({
+    from,
+    to,
+    maxRange: cfg.chunk ?? 2000,
+    delayMs: cfg.logDelayMs,
+    fetch: (fromBlock, toBlock) => cfg.client.getContractEvents({ address: cfg.escrow, abi: PREPAID_ESCROW_ABI, fromBlock, toBlock }),
+  });
+  stats.logs = logs.length;
+  for (const log of logs) {
+    if (log.eventName === "Purchased") entry(log.args.planId!).purchaseTx = log.transactionHash;
+    else if (log.eventName === "Redeemed")
+      entry(log.args.planId!).sessions.push({ sessionNo: Number(log.args.sessionNo), txHash: log.transactionHash, blockNumber: log.blockNumber });
+    else if (log.eventName === "Exited") entry(log.args.planId!);
   }
   stats.plansTouched = touched.size;
 
@@ -146,7 +156,7 @@ export async function runChainSync(pool: Pool, cfg: ChainSyncConfig): Promise<Ch
           continue;
         }
         const logs = touched.get(p.planId)!;
-        const purchaseTx = logs.purchaseTx ?? (await findPurchaseTx(cfg, p.planId));
+        const purchaseTx = logs.purchaseTx ?? (await findPurchaseTx(cfg, p.planId, to, maxRange));
         const sessions = await Promise.all(logs.sessions.map(async (s) => ({ ...s, at: await timeOf(s.blockNumber) })));
         try {
           const inserted = await withUserTx(userId, async (tx) => {

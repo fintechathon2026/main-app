@@ -239,7 +239,7 @@ Idempotency layers: stored raw transaction (same hash on retry), `actions.idempo
 
 ### 7.6 Indexer (`cron/chain-sync`)
 
-- Range: `chain_cursors.last_block + 1` … `latest − CHAIN_CONFIRMATIONS` (default 2; 0 on anvil), in chunks of at most `CHAIN_LOG_CHUNK` blocks (default 2,000). The first run starts at `CHAIN_START_BLOCK` (the deploy block).
+- Range: `chain_cursors.last_block + 1` … `latest − CHAIN_CONFIRMATIONS` (default 2; 0 on anvil), in chunks of at most `CHAIN_LOG_CHUNK` blocks (default 2,000, inclusive bounds). A chunk the RPC rejects as too wide is retried smaller (the provider's suggested range, else half) and the smaller size is kept; every block is still covered once. `CHAIN_LOG_DELAY_MS` (default 0) pauses between getLogs calls. The first run starts at `CHAIN_START_BLOCK`, or when unset at the deploy block of a known deployment (`contracts/deployments/<chainId>.json`) whose escrow is `ESCROW_ADDRESS`, else 0.
 - Logs: `Purchased`, `Redeemed`, `Exited` from `ESCROW_ADDRESS`.
 - Users: `REINS_CRON_USER_IDS` (the same stop-gap as `cron/detect` until a security-definer lookup exists). For each user: read the wallet address, keep the plans whose consumer is that wallet, re-read each touched plan with `getPlan`, then upsert `prepaid_plans` (keyed by `chain_plan_id`, `origin 'chain'`) and insert `prepaid_sessions` from `Redeemed` logs (tx hash, block time).
 - Merchant mapping: `prepaid_merchants.chain_address` (case-insensitive). An unknown merchant address is skipped and counted, never invented.
@@ -265,7 +265,7 @@ ESLint `no-restricted-syntax` on `process.env.AGENT_PRIVATE_KEY` and `process.en
 | `ORACLE_ADDRESS`, `AGENT_ADDRESS` | Gate facts, risk job | must equal the oracle in the contract and the agent key's address (checked at adapter start) |
 | `RELAYER_PRIVATE_KEY`, `AGENT_PRIVATE_KEY` | adapter only | funded with Base Sepolia ETH |
 | `MERCHANT_SIM_PRIVATE_KEY`, `ORACLE_PRIVATE_KEY` | simulators only | |
-| `CHAIN_START_BLOCK`, `CHAIN_CONFIRMATIONS`, `CHAIN_LOG_CHUNK`, `CHAIN_RECEIPT_TIMEOUT_MS` | indexer, adapter | new, optional with defaults |
+| `CHAIN_START_BLOCK`, `CHAIN_CONFIRMATIONS`, `CHAIN_LOG_CHUNK`, `CHAIN_LOG_DELAY_MS`, `CHAIN_RECEIPT_TIMEOUT_MS` | indexer, adapter | new, optional with defaults (start block falls back to the known deploy block; chunk shrinks on a range error) |
 | `DEPLOYER_PRIVATE_KEY` | `Deploy.s.sol` | local/CI only, never on Vercel |
 
 ## 8. Testing
