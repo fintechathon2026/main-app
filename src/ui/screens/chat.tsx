@@ -8,7 +8,7 @@
 import { ArrowLeft, ArrowUp, HandPalm, Paperclip, X } from "@phosphor-icons/react/dist/ssr";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ChatStreamEvent } from "@/src/server/api-types";
 
 type Msg =
@@ -16,6 +16,29 @@ type Msg =
   | { role: "agent"; text: string; status: string | null; approval: boolean; error: string | null; done: boolean };
 
 const STARTERS = ["What do I need to pay this week?", "Why was a payment blocked?", "Which subscriptions should I cancel?"];
+
+/** Renders `**bold**` and `- ` bullet lists in the agent's reply; everything else is plain text. */
+function Markdown({ text }: { text: string }) {
+  const bold = (s: string) => s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
+  );
+  const blocks: ReactNode[] = [];
+  let list: string[] = [];
+  const flushList = () => {
+    if (list.length) blocks.push(<ul key={blocks.length} className="my-1 list-disc space-y-0.5 pl-5">{list.map((item, i) => <li key={i}>{bold(item)}</li>)}</ul>);
+    list = [];
+  };
+  for (const line of text.split("\n")) {
+    const bullet = /^[-*]\s+(.*)/.exec(line);
+    if (bullet) list.push(bullet[1]!);
+    else {
+      flushList();
+      if (line.trim()) blocks.push(<p key={blocks.length}>{bold(line)}</p>);
+    }
+  }
+  flushList();
+  return <div className="space-y-2">{blocks}</div>;
+}
 
 // Graph node names (src/agent/graph.ts) -> plain progress words.
 const NODE_TEXT: Record<string, string> = {
@@ -153,7 +176,7 @@ export function ChatScreen() {
           ) : (
             <div key={i} className="max-w-[85%]">
               <p className="mb-1 text-[12px] font-semibold text-muted">Reins</p>
-              {m.text && <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{m.text}</p>}
+              {m.text && <div className="text-[15px] leading-relaxed">{<Markdown text={m.text} />}</div>}
               {!m.done && !m.error && <p className="text-[14px] text-muted">{m.status ?? "Thinking"}…</p>}
               {m.approval && (
                 <Link
